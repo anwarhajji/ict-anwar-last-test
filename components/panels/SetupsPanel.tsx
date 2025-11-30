@@ -11,7 +11,7 @@ interface SetupsPanelProps {
     onViewOnChart: (e: EntrySignal) => void;
 }
 
-const MODEL_INFO: Record<string, { desc: string; rules: string[] }> = {
+export const MODEL_INFO: Record<string, { desc: string; rules: string[] }> = {
     '2022 Model': {
         desc: "A classic reversal pattern characterized by a Liquidity Sweep followed by a Market Structure Shift (MSS) and a return to a Fair Value Gap.",
         rules: [

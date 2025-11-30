@@ -34,6 +34,7 @@ interface PanelProps {
     onFocusEntry?: (e: EntrySignal) => void;
     focusedEntry?: EntrySignal | null;
     onReplay?: (e: EntrySignal) => void;
+    onViewOnChart?: (e: EntrySignal) => void;
 }
 
 export const Panels: React.FC<PanelProps> = (props) => {
@@ -73,6 +74,7 @@ export const Panels: React.FC<PanelProps> = (props) => {
                 setClickedEntry={props.setClickedEntry} 
                 overlays={props.overlays}
                 setOverlays={props.setOverlays}
+                onViewOnChart={props.onViewOnChart || (() => {})}
                 {...commonProps}
             />;
         case 'SETTINGS':

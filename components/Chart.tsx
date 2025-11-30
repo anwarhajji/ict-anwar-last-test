@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
     createChart, 
@@ -61,7 +60,11 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
     const sessionSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
     const macroSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    
+    // Layer Refs
+    const canvasBgRef = useRef<HTMLCanvasElement>(null); // Background (Boxes, OBs)
+    const canvasFgRef = useRef<HTMLCanvasElement>(null); // Foreground (Labels)
+    
     const activeTradeLinesRef = useRef<IPriceLine[]>([]);
     const mousePos = useRef<{ x: number, y: number } | null>(null);
     const drawCanvasOverlayRef = useRef<() => void>(() => {});
@@ -130,7 +133,8 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
         }
 
         const chart = createChart(chartContainerRef.current, {
-            layout: { background: { type: ColorType.Solid, color: '#0b0e11' }, textColor: '#848e9c' },
+            // Set background to transparent so underlying canvas shows through
+            layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#848e9c' },
             grid: { vertLines: { color: '#151924' }, horzLines: { color: '#151924' } },
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight,
@@ -327,27 +331,36 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     // Canvas Overlay Drawing
     const drawCanvasOverlay = useCallback(() => {
         const chart = chartRef.current;
-        const canvas = canvasRef.current;
+        const canvasBg = canvasBgRef.current;
+        const canvasFg = canvasFgRef.current;
         const container = chartContainerRef.current;
         const series = candleSeriesRef.current;
-        if (!chart || !canvas || !container || !series) return;
+        if (!chart || !canvasBg || !canvasFg || !container || !series) return;
         
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        const ctxBg = canvasBg.getContext('2d');
+        const ctxFg = canvasFg.getContext('2d');
+        if (!ctxBg || !ctxFg) return;
         
         const pixelRatio = window.devicePixelRatio || 1;
-        if (canvas.width !== container.clientWidth * pixelRatio || canvas.height !== container.clientHeight * pixelRatio) {
-            canvas.width = container.clientWidth * pixelRatio;
-            canvas.height = container.clientHeight * pixelRatio;
-            canvas.style.width = container.clientWidth + "px";
-            canvas.style.height = container.clientHeight + "px";
-            ctx.scale(pixelRatio, pixelRatio);
-        }
+        
+        // Resize Both Canvases
+        [canvasBg, canvasFg].forEach(canvas => {
+            if (canvas.width !== container.clientWidth * pixelRatio || canvas.height !== container.clientHeight * pixelRatio) {
+                canvas.width = container.clientWidth * pixelRatio;
+                canvas.height = container.clientHeight * pixelRatio;
+                canvas.style.width = container.clientWidth + "px";
+                canvas.style.height = container.clientHeight + "px";
+                const ctx = canvas.getContext('2d');
+                if (ctx) ctx.scale(pixelRatio, pixelRatio);
+            }
+        });
         
         const timeScale = chart.timeScale();
 
         drawCanvasLayer(
-            ctx, timeScale, series, props.data, props.obs, props.fvgs, visibleEntries, props.overlays, props.colors, props.pdRange, container.clientWidth, container.clientHeight, props.htfObs, props.htfFvgs, props.setupVisibility
+            ctxBg,
+            ctxFg,
+            timeScale, series, props.data, props.obs, props.fvgs, visibleEntries, props.overlays, props.colors, props.pdRange, container.clientWidth, container.clientHeight, props.htfObs, props.htfFvgs, props.setupVisibility
         );
     }, [props.data, props.obs, props.fvgs, props.htfObs, props.htfFvgs, visibleEntries, props.pdRange, props.overlays, props.colors, props.setupVisibility]);
 
@@ -357,9 +370,15 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     }, [drawCanvasOverlay]);
 
     return (
-        <div className="relative w-full h-full flex flex-col">
-            <div ref={chartContainerRef} className="flex-1 w-full h-full overflow-hidden" />
-            <canvas ref={canvasRef} className="absolute top-0 left-0 pointer-events-none z-10" />
+        <div className="relative w-full h-full flex flex-col bg-[#0b0e11]">
+            {/* Background Canvas (Z=0) */}
+            <canvas ref={canvasBgRef} className="absolute top-0 left-0 pointer-events-none z-0" />
+            
+            {/* Chart Container (Z=10) - Chart is Transparent */}
+            <div ref={chartContainerRef} className="absolute inset-0 z-10 overflow-hidden" />
+            
+            {/* Foreground Canvas (Z=20) - Labels/Text */}
+            <canvas ref={canvasFgRef} className="absolute top-0 left-0 pointer-events-none z-20" />
             
             <div className="absolute bottom-16 right-4 flex flex-col gap-2 z-30 pointer-events-auto">
                 <button onClick={() => handleZoom(0.8)} className="w-10 h-10 bg-[#1e222d] text-white rounded-full hover:bg-gray-700 shadow-lg border border-gray-600 flex items-center justify-center opacity-80 transition-opacity hover:opacity-100">

@@ -1,7 +1,9 @@
+
 import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
 import { EntrySignal } from '../types';
+import { MODEL_INFO } from './panels/SetupsPanel';
 
-export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClose: () => void }) => {
+export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySignal, onClose: () => void, onReplay?: () => void }) => {
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -10,7 +12,7 @@ export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClo
     // Initial positioning center screen
     useEffect(() => {
         setPosition({ 
-            x: Math.max(20, window.innerWidth / 2 - 200), 
+            x: Math.max(20, window.innerWidth / 2 - 225), 
             y: Math.max(20, window.innerHeight / 2 - 250) 
         });
     }, []);
@@ -47,6 +49,8 @@ export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClo
         };
     }, [isDragging, dragOffset]);
 
+    const setupInfo = MODEL_INFO[entry.setupName] || { desc: "Custom or standard algorithmic pattern detection.", rules: [] };
+
     return (
         <div 
             ref={panelRef}
@@ -55,7 +59,7 @@ export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClo
                 top: position.y,
                 position: 'fixed'
             }}
-            className="z-[100] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.6)] max-w-md w-full animate-in fade-in zoom-in-95 flex flex-col"
+            className="z-[100] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.6)] max-w-[450px] w-full animate-in fade-in zoom-in-95 flex flex-col"
             onClick={e => e.stopPropagation()}
         >
             <div 
@@ -92,17 +96,54 @@ export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClo
                     </div>
                 </div>
 
-                <div className="mb-4">
-                    <div className="text-xs font-bold text-gray-400 mb-2 uppercase">Confluence & Strategy</div>
-                    <ul className="space-y-2">
-                        {entry.confluences.map((c, i) => (
-                            <li key={i} className="flex items-center gap-2 text-sm text-gray-300">
-                                <span className="text-green-500">✓</span> {c}
-                            </li>
-                        ))}
-                        <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-blue-500">ℹ</span> Style: {entry.tradingStyle}</li>
-                        <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-purple-500">ℹ</span> PO3 Phase: {entry.po3Phase}</li>
-                    </ul>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    {/* Left Col: Confluence List */}
+                    <div>
+                        <div className="text-xs font-bold text-gray-400 mb-2 uppercase">Confluence & Strategy</div>
+                        <ul className="space-y-2">
+                            {entry.confluences.map((c, i) => (
+                                <li key={i} className="flex items-center gap-2 text-sm text-gray-300">
+                                    <span className="text-green-500">✓</span> {c}
+                                </li>
+                            ))}
+                            <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-blue-500">ℹ</span> Style: {entry.tradingStyle}</li>
+                            <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-purple-500">ℹ</span> Phase: {entry.po3Phase}</li>
+                        </ul>
+                    </div>
+                    
+                    {/* Right Col: Actions & Logic */}
+                    <div className="flex flex-col gap-3">
+                         {/* Replay Button */}
+                        {onReplay && (
+                            <button 
+                                onClick={onReplay}
+                                className="flex items-center justify-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 hover:text-white border border-blue-600/50 p-2 rounded transition-all group"
+                                title="Replay this exact trade setup"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:animate-spin-slow"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                <span className="text-xs font-bold uppercase">Replay Setup</span>
+                            </button>
+                        )}
+                        
+                        {/* Interactive Explication Card */}
+                        <div className="relative group cursor-help bg-[#0b0e11] p-3 rounded border border-gray-800 hover:border-gray-500 transition-colors flex-1 flex flex-col justify-center">
+                            <div className="flex items-center gap-2 mb-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                <div className="text-xs text-gray-500 uppercase font-bold group-hover:text-blue-400 transition-colors">Strategy Logic</div>
+                            </div>
+                            <div className="text-white text-xs opacity-70 group-hover:opacity-100 italic">Hover to view analysis...</div>
+                            
+                            {/* Hover Popup */}
+                            <div className="absolute top-0 right-[105%] w-64 bg-[#151924] border border-blue-500/50 p-4 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 translate-x-4 group-hover:translate-x-0">
+                                <h4 className="font-bold text-white mb-2 border-b border-gray-700 pb-2">{entry.setupName}</h4>
+                                <p className="text-xs text-gray-300 mb-3 leading-relaxed">{setupInfo.desc}</p>
+                                <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">Rules:</div>
+                                <ul className="list-disc pl-4 text-[10px] text-gray-400 space-y-1">
+                                    {setupInfo.rules.map((r, i) => <li key={i}>{r}</li>)}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="bg-gray-800/30 p-4 rounded border border-gray-700 space-y-2">

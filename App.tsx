@@ -289,7 +289,7 @@ const App: React.FC = () => {
         <div className="flex flex-col h-screen bg-[#0b0e11] text-[#e1e3e6] font-sans overflow-hidden">
             {alert && <ToastNotification message={alert.msg} type={alert.type} onClose={() => setAlert(null)} />}
             {showTopSetups && <TopSetupsModal entries={entries} onClose={() => setShowTopSetups(false)} />}
-            {clickedEntry && <EntryDetailModal entry={clickedEntry} onClose={() => setClickedEntry(null)} />}
+            {clickedEntry && <EntryDetailModal entry={clickedEntry} onClose={() => setClickedEntry(null)} onReplay={() => handleStartReplay(clickedEntry)} />}
 
             {/* TOP BAR */}
             <header className="h-14 bg-[#151924] border-b border-[#2a2e39] flex items-center justify-between px-4 shrink-0 z-50">
@@ -526,16 +526,14 @@ const App: React.FC = () => {
                             onDeepScan={handleDeepScan} isScanning={isScanning}
                             onFocusEntry={handleFocusEntry}
                             focusedEntry={focusedEntry}
-                            // @ts-ignore
                             onReplay={handleStartReplay}
-                            // @ts-ignore
                             onViewOnChart={handleViewOnChart}
                         />
                     </aside>
                 )}
             </div>
             
-            {/* MOBILE NAVIGATION ... (omitted for brevity, unchanged) ... */}
+            {/* MOBILE NAVIGATION */}
              <nav className="md:hidden h-16 bg-[#151924] border-t border-[#2a2e39] flex items-center justify-around shrink-0 z-50 pb-safe">
                  <button onClick={() => setActiveTab('DASHBOARD')} className={`flex flex-col items-center gap-1 ${activeTab === 'DASHBOARD' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <DashboardIcon /> <span className="text-[10px]">Home</span>

@@ -1,4 +1,3 @@
-
 import { ISeriesApi, ITimeScaleApi, Time } from "lightweight-charts";
 import { CandleData, EntrySignal } from "../types";
 
@@ -9,7 +8,8 @@ export const drawSetups = (
     data: CandleData[],
     entries: EntrySignal[],
     visible: boolean,
-    width: number
+    width: number,
+    layer: 'bg' | 'fg' = 'bg'
 ) => {
     if (!visible || entries.length === 0 || data.length === 0) return;
 
@@ -36,11 +36,9 @@ export const drawSetups = (
         ctx.beginPath();
         
         // Fix for roundRect TypeScript error / Browser compatibility
-        // Cast ctx to any to avoid TS error 'Property roundRect does not exist on type CanvasRenderingContext2D'
         if (typeof (ctx as any).roundRect === 'function') {
             (ctx as any).roundRect(drawX, y - bgH/2, bgW, bgH, 3);
         } else {
-            // Fallback for older browsers
             ctx.rect(drawX, y - bgH/2, bgW, bgH);
         }
         
@@ -104,100 +102,112 @@ export const drawSetups = (
         const lossFill = lossColor + '0.15)';
         const lossStroke = lossColor + '0.5)';
 
-        // --- DRAW "CAUSE" LINE (Exact Entry Indicator) ---
-        // Draws a line from the entry candle to the logic level (e.g. OB High)
-        if (entry.confluenceLevel) {
-            const yConf = series.priceToCoordinate(entry.confluenceLevel);
-            if (yConf !== null) {
-                ctx.beginPath();
-                ctx.moveTo(x1, yEntry);
-                ctx.lineTo(x1 - 25, yConf); // Draw line back slightly
-                ctx.strokeStyle = isLong ? '#0ecb81' : '#f6465d';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([2, 2]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-                
-                // Draw a small dot at the confluence price
-                ctx.beginPath();
-                ctx.arc(x1 - 25, yConf, 2, 0, Math.PI * 2);
-                ctx.fillStyle = isLong ? '#0ecb81' : '#f6465d';
-                ctx.fill();
+        // ==========================
+        // BACKGROUND LAYER DRAWING
+        // ==========================
+        if (layer === 'bg') {
+            // --- DRAW "CAUSE" LINE (Exact Entry Indicator) ---
+            if (entry.confluenceLevel) {
+                const yConf = series.priceToCoordinate(entry.confluenceLevel);
+                if (yConf !== null) {
+                    ctx.beginPath();
+                    ctx.moveTo(x1, yEntry);
+                    ctx.lineTo(x1 - 25, yConf); // Draw line back slightly
+                    ctx.strokeStyle = isLong ? '#0ecb81' : '#f6465d';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([2, 2]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Draw a small dot at the confluence price
+                    ctx.beginPath();
+                    ctx.arc(x1 - 25, yConf, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = isLong ? '#0ecb81' : '#f6465d';
+                    ctx.fill();
 
-                // Small text indicating reason
-                if (x1 > 30) {
-                   ctx.fillStyle = '#848e9c';
-                   ctx.font = 'italic 9px Inter';
-                   ctx.fillText("Entry Cause", x1 - 50, yConf - 5);
+                    // Small text indicating reason
+                    if (x1 > 30) {
+                       ctx.fillStyle = '#848e9c';
+                       ctx.font = 'italic 9px Inter';
+                       ctx.fillText("Entry Cause", x1 - 50, yConf - 5);
+                    }
                 }
             }
+
+            // Draw Profit Box
+            const hTP = yTP - yEntry;
+            ctx.fillStyle = profitFill;
+            ctx.strokeStyle = profitStroke;
+            ctx.lineWidth = 1;
+            ctx.fillRect(x1, yEntry, boxWidth, hTP);
+            ctx.strokeRect(x1, yEntry, boxWidth, hTP);
+
+            // Draw Loss Box
+            const hSL = ySL - yEntry;
+            ctx.fillStyle = lossFill;
+            ctx.strokeStyle = lossStroke;
+            ctx.fillRect(x1, yEntry, boxWidth, hSL);
+            ctx.strokeRect(x1, yEntry, boxWidth, hSL);
+
+            // Entry Line (Dashed)
+            ctx.beginPath();
+            ctx.moveTo(x1, yEntry);
+            ctx.lineTo(x1 + boxWidth, yEntry);
+            ctx.strokeStyle = '#78909c';
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Vertical connector line at start
+            ctx.beginPath();
+            ctx.moveTo(x1, ySL);
+            ctx.lineTo(x1, yTP);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
 
-        // Draw Profit Box
-        const hTP = yTP - yEntry;
-        ctx.fillStyle = profitFill;
-        ctx.strokeStyle = profitStroke;
-        ctx.lineWidth = 1;
-        ctx.fillRect(x1, yEntry, boxWidth, hTP);
-        ctx.strokeRect(x1, yEntry, boxWidth, hTP);
+        // ==========================
+        // FOREGROUND LAYER DRAWING
+        // ==========================
+        if (layer === 'fg') {
+            const hTP = yTP - yEntry;
+            const hSL = ySL - yEntry;
 
-        // Draw Loss Box
-        const hSL = ySL - yEntry;
-        ctx.fillStyle = lossFill;
-        ctx.strokeStyle = lossStroke;
-        ctx.fillRect(x1, yEntry, boxWidth, hSL);
-        ctx.strokeRect(x1, yEntry, boxWidth, hSL);
+            // LABELS
+            if (boxWidth > 60) {
+                const risk = Math.abs(entry.price - entry.sl);
+                const reward = Math.abs(entry.price - entry.tp);
+                const rr = reward / (risk || 1);
 
-        // Entry Line (Dashed)
-        ctx.beginPath();
-        ctx.moveTo(x1, yEntry);
-        ctx.lineTo(x1 + boxWidth, yEntry);
-        ctx.strokeStyle = '#78909c';
-        ctx.setLineDash([4, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
+                // Risk/Reward Ratio Pill
+                drawLabel(`R:R ${rr.toFixed(1)}`, x1 + boxWidth/2, yEntry, '#000000', 'center', '#e0e0e0');
 
-        // Vertical connector line at start
-        ctx.beginPath();
-        ctx.moveTo(x1, ySL);
-        ctx.lineTo(x1, yTP);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+                // TP Label (Blue Theme)
+                if (Math.abs(hTP) > 20) {
+                    const tpPct = ((Math.abs(entry.price - entry.tp) / entry.price) * 100).toFixed(2);
+                    drawLabel(`Target: ${tpPct}%`, x1 + boxWidth/2, yTP + (isLong ? 12 : -12), '#2962FF', 'center', '#1e222d');
+                }
 
-        // LABELS
-        if (boxWidth > 60) {
-            const risk = Math.abs(entry.price - entry.sl);
-            const reward = Math.abs(entry.price - entry.tp);
-            const rr = reward / (risk || 1);
-
-            // Risk/Reward Ratio Pill
-            drawLabel(`R:R ${rr.toFixed(1)}`, x1 + boxWidth/2, yEntry, '#000000', 'center', '#e0e0e0');
-
-            // TP Label (Blue Theme)
-            if (Math.abs(hTP) > 20) {
-                const tpPct = ((Math.abs(entry.price - entry.tp) / entry.price) * 100).toFixed(2);
-                drawLabel(`Target: ${tpPct}%`, x1 + boxWidth/2, yTP + (isLong ? 12 : -12), '#2962FF', 'center', '#1e222d');
+                // SL Label
+                if (Math.abs(hSL) > 20) {
+                     const slPct = ((Math.abs(entry.price - entry.sl) / entry.price) * 100).toFixed(2);
+                     drawLabel(`Stop: ${slPct}%`, x1 + boxWidth/2, ySL + (isLong ? -12 : 12), '#f6465d', 'center', '#1e222d');
+                }
             }
-
-            // SL Label
-            if (Math.abs(hSL) > 20) {
-                 const slPct = ((Math.abs(entry.price - entry.sl) / entry.price) * 100).toFixed(2);
-                 drawLabel(`Stop: ${slPct}%`, x1 + boxWidth/2, ySL + (isLong ? -12 : 12), '#f6465d', 'center', '#1e222d');
+            
+            // PnL/Result Icon at end
+            if (entry.backtestResult !== 'PENDING' && x2 !== null && x2 < width - 20) {
+                 const isWin = entry.backtestResult === 'WIN';
+                 ctx.font = '14px Inter';
+                 ctx.textAlign = 'left';
+                 ctx.textBaseline = 'middle';
+                 // PnL Text Color matching the Box
+                 ctx.fillStyle = isWin ? '#2962FF' : '#f6465d';
+                 const icon = isWin ? '✅' : '❌';
+                 const pnlText = entry.backtestPnL ? ` $${Math.abs(entry.backtestPnL).toFixed(0)}` : '';
+                 ctx.fillText(icon + pnlText, x2 + 5, yEntry);
             }
-        }
-        
-        // PnL/Result Icon at end
-        if (entry.backtestResult !== 'PENDING' && x2 !== null && x2 < width - 20) {
-             const isWin = entry.backtestResult === 'WIN';
-             ctx.font = '14px Inter';
-             ctx.textAlign = 'left';
-             ctx.textBaseline = 'middle';
-             // PnL Text Color matching the Box
-             ctx.fillStyle = isWin ? '#2962FF' : '#f6465d';
-             const icon = isWin ? '✅' : '❌';
-             const pnlText = entry.backtestPnL ? ` $${Math.abs(entry.backtestPnL).toFixed(0)}` : '';
-             ctx.fillText(icon + pnlText, x2 + 5, yEntry);
         }
     });
 };
