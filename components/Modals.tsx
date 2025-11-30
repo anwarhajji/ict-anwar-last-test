@@ -12,8 +12,8 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
     // Initial positioning center screen
     useEffect(() => {
         setPosition({ 
-            x: Math.max(20, window.innerWidth / 2 - 225), 
-            y: Math.max(20, window.innerHeight / 2 - 250) 
+            x: Math.max(10, window.innerWidth / 2 - Math.min(window.innerWidth * 0.95, 450) / 2), 
+            y: Math.max(20, window.innerHeight / 2 - 300) 
         });
     }, []);
 
@@ -59,14 +59,14 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                 top: position.y,
                 position: 'fixed'
             }}
-            className="z-[100] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.6)] max-w-[450px] w-full animate-in fade-in zoom-in-95 flex flex-col"
+            className="z-[100] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.6)] w-[95vw] max-w-[450px] max-h-[85vh] overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 flex flex-col"
             onClick={e => e.stopPropagation()}
         >
             <div 
-                className="flex justify-between items-center p-4 border-b border-gray-700 cursor-move bg-[#151924] rounded-t-lg select-none"
+                className="flex justify-between items-center p-4 border-b border-gray-700 cursor-move bg-[#151924] rounded-t-lg select-none sticky top-0 z-10"
                 onMouseDown={handleMouseDown}
             >
-                <h3 className={`text-2xl font-bold ${entry.type === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
+                <h3 className={`text-xl md:text-2xl font-bold ${entry.type === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
                     {entry.type} SETUP
                 </h3>
                 <button 
@@ -77,27 +77,44 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                 </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 md:p-6">
                 <div className="text-right -mt-2 mb-4">
                     <div className="text-xs text-gray-500 uppercase font-bold">Entry Date</div>
                     <div className="text-white text-sm font-mono">{new Date((entry.time as number) * 1000).toLocaleString()}</div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* Primary Stats */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-[#0b0e11] p-3 rounded border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">ENTRY PRICE</div>
-                        <div className="text-xl font-mono text-white">{entry.price.toFixed(2)}</div>
+                        <div className="text-[10px] md:text-xs text-gray-500 mb-1">ENTRY PRICE</div>
+                        <div className="text-lg md:text-xl font-mono text-white">{entry.price.toFixed(2)}</div>
                     </div>
                     <div className="bg-[#0b0e11] p-3 rounded border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">RESULT (2R)</div>
-                        <div className={`text-xl font-bold ${entry.backtestResult === 'WIN' ? 'text-green-500' : entry.backtestResult === 'LOSS' ? 'text-red-500' : 'text-yellow-500'}`}>
+                        <div className="text-[10px] md:text-xs text-gray-500 mb-1">RESULT (2R)</div>
+                        <div className={`text-lg md:text-xl font-bold ${entry.backtestResult === 'WIN' ? 'text-green-500' : entry.backtestResult === 'LOSS' ? 'text-red-500' : 'text-yellow-500'}`}>
                             {entry.backtestResult || 'PENDING'}
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                    {/* Left Col: Confluence List */}
+                {/* New Setup Stats Section */}
+                <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+                    <div className="bg-[#151924] p-2 rounded border border-gray-700/50">
+                        <div className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Model</div>
+                        <div className="text-xs md:text-sm font-bold text-blue-400 truncate px-1" title={entry.setupName}>{entry.setupName}</div>
+                    </div>
+                    <div className="bg-[#151924] p-2 rounded border border-gray-700/50">
+                        <div className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Grade</div>
+                        <div className={`text-xs md:text-sm font-bold ${entry.setupGrade?.includes('A') ? 'text-yellow-400' : 'text-gray-400'}`}>{entry.setupGrade || 'N/A'}</div>
+                    </div>
+                     <div className="bg-[#151924] p-2 rounded border border-gray-700/50">
+                        <div className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Win Prob</div>
+                        <div className="text-xs md:text-sm font-bold text-green-400">{entry.winProbability}%</div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {/* Confluence List */}
                     <div>
                         <div className="text-xs font-bold text-gray-400 mb-2 uppercase">Confluence & Strategy</div>
                         <ul className="space-y-2">
@@ -111,7 +128,7 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                         </ul>
                     </div>
                     
-                    {/* Right Col: Actions & Logic */}
+                    {/* Actions & Logic */}
                     <div className="flex flex-col gap-3">
                          {/* Replay Button */}
                         {onReplay && (
@@ -134,7 +151,7 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                             <div className="text-white text-xs opacity-70 group-hover:opacity-100 italic">Hover to view explication</div>
                             
                             {/* Hover Popup */}
-                            <div className="absolute top-0 right-[105%] w-64 bg-[#151924] border border-blue-500/50 p-4 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 translate-x-4 group-hover:translate-x-0">
+                            <div className="hidden md:block absolute top-0 right-[105%] w-64 bg-[#151924] border border-blue-500/50 p-4 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 translate-x-4 group-hover:translate-x-0">
                                 <h4 className="font-bold text-white mb-2 border-b border-gray-700 pb-2">{entry.setupName}</h4>
                                 <p className="text-xs text-gray-300 mb-3 leading-relaxed">{setupInfo.desc}</p>
                                 <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">Rules:</div>
@@ -142,6 +159,11 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                                     {setupInfo.rules.map((r, i) => <li key={i}>{r}</li>)}
                                 </ul>
                             </div>
+                            
+                            {/* Mobile Click Reveal (instead of hover) */}
+                             <div className="md:hidden mt-2 pt-2 border-t border-gray-800 text-[10px] text-gray-400 leading-relaxed">
+                                {setupInfo.desc}
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -185,9 +207,9 @@ export const TopSetupsModal = ({ entries, onClose }: { entries: EntrySignal[], o
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-[#1e222d] border border-yellow-500 rounded-lg max-w-2xl w-full p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1e222d] border border-yellow-500 rounded-lg w-[95vw] max-w-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
                 <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">✕</button>
-                <h2 className="text-2xl font-bold text-yellow-400 mb-6 flex items-center gap-2">⚡ TOP 3 HIGH PROBABILITY SETUPS</h2>
+                <h2 className="text-xl md:text-2xl font-bold text-yellow-400 mb-6 flex items-center gap-2">⚡ TOP 3 HIGH PROBABILITY SETUPS</h2>
                 <div className="space-y-4">
                     {topSetups.map((setup, i) => (
                         <div key={i} className="bg-gray-800/50 border border-gray-700 p-4 rounded hover:bg-gray-800 transition-colors">

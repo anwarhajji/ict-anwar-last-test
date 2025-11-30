@@ -35,6 +35,7 @@ interface PanelProps {
     focusedEntry?: EntrySignal | null;
     onReplay?: (e: EntrySignal) => void;
     onViewOnChart?: (e: EntrySignal) => void;
+    currentAsset?: string;
 }
 
 export const Panels: React.FC<PanelProps> = (props) => {
@@ -54,6 +55,7 @@ export const Panels: React.FC<PanelProps> = (props) => {
                 onFocusEntry={props.onFocusEntry}
                 focusedEntry={props.focusedEntry}
                 onReplay={props.onReplay}
+                currentAsset={props.currentAsset}
                 {...commonProps}
             />;
         case 'TRADING':

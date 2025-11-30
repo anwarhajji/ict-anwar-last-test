@@ -81,7 +81,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
                 transform: position ? 'none' : 'translateX(-50%)',
                 position: 'fixed'
             }}
-            className="z-[90] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_40px_rgba(0,0,0,0.6)] flex flex-col min-w-[360px] animate-in fade-in zoom-in-95 overflow-hidden"
+            className="z-[90] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_40px_rgba(0,0,0,0.6)] flex flex-col w-[95vw] max-w-[400px] min-w-[300px] animate-in fade-in zoom-in-95 overflow-hidden"
         >
             <style>{`
                 input[type=range]::-webkit-slider-thumb {

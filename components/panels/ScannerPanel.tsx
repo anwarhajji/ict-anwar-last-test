@@ -12,9 +12,12 @@ interface ScannerPanelProps {
     onFocusEntry?: (e: EntrySignal) => void;
     focusedEntry?: EntrySignal | null;
     onReplay?: (e: EntrySignal) => void;
+    currentAsset?: string;
 }
 
-export const ScannerPanel: React.FC<ScannerPanelProps> = ({ structure, entries, setClickedEntry, onDeepScan, isScanning, onFocusEntry, focusedEntry, onReplay }) => {
+export const ScannerPanel: React.FC<ScannerPanelProps> = ({ 
+    structure, entries, setClickedEntry, onDeepScan, isScanning, onFocusEntry, focusedEntry, onReplay, currentAsset 
+}) => {
     return (
         <div className="h-full flex flex-col bg-[#151924]">
             <div className="p-4 border-b border-[#2a2e39] flex justify-between items-center shrink-0">
@@ -54,17 +57,21 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({ structure, entries, 
                             return (
                                 <div key={i} className={`group p-3 bg-[#0b0e11] rounded border transition-colors ${isFocused ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)] bg-blue-900/10' : 'border-[#2a2e39] hover:border-blue-500'}`}>
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setClickedEntry(entry)}>
-                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${entry.type === 'LONG' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                                                {entry.type}
-                                            </span>
-                                            <span className="text-xs text-gray-500 font-mono">
-                                                {new Date(entry.time as number * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                            </span>
+                                        <div className="flex flex-col cursor-pointer" onClick={() => setClickedEntry(entry)}>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${entry.type === 'LONG' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                                    {entry.type}
+                                                </span>
+                                                <span className="text-xs font-bold text-white truncate max-w-[80px]">{currentAsset || 'Asset'}</span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 font-mono">
+                                                {new Date(entry.time as number * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} • @ {entry.price.toFixed(2)}
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="bg-gray-800 text-[10px] text-gray-300 px-1 rounded">
-                                                Score: {entry.score}
+
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="bg-gray-800 text-[10px] text-gray-300 px-1.5 py-0.5 rounded border border-gray-700">
+                                                {entry.score}/10
                                             </div>
                                             {onReplay && (
                                                 <button 
@@ -90,7 +97,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({ structure, entries, 
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setClickedEntry(entry)}>
+                                    <div className="flex justify-between items-center cursor-pointer pt-1 border-t border-gray-800/50 mt-1" onClick={() => setClickedEntry(entry)}>
                                         <span className="text-xs text-gray-300 font-medium truncate w-24" title={entry.setupName}>{entry.setupName || 'Standard Setup'}</span>
                                         {entry.setupGrade && <span className={`text-[10px] font-bold px-1 rounded ${entry.setupGrade.includes('A') ? 'text-yellow-400' : 'text-gray-500'}`}>{entry.setupGrade}</span>}
                                     </div>

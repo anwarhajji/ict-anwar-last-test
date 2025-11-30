@@ -74,6 +74,10 @@ const App: React.FC = () => {
     const [replayMode, setReplayMode] = useState({ active: false, index: 0, playing: false, speed: 500 });
     const [replayDateInput, setReplayDateInput] = useState('');
     const dateInputRef = useRef<HTMLInputElement>(null);
+    // New: Replay Setup Filters
+    const [replaySetupFilters, setReplaySetupFilters] = useState<Record<string, boolean>>({
+        '2022 Model': true, 'Silver Bullet': true, 'Unicorn': true, 'OTE': true, 'Breaker': true, 'Standard FVG': true
+    });
 
     // Visibility & Focus State
     const [setupVisibility, setSetupVisibility] = useState<'ALL'|'FOCUS'|'NONE'>('NONE');
@@ -188,12 +192,27 @@ const App: React.FC = () => {
                     if (prev.index >= data.length) {
                         return { ...prev, playing: false };
                     }
-                    return { ...prev, index: prev.index + 1 };
+                    
+                    // Replay Notification Logic
+                    const nextIndex = prev.index + 1;
+                    const candle = data[nextIndex];
+                    if (candle) {
+                        const detectedEntry = entries.find(e => e.time === candle.time);
+                        // Check if entry exists and is allowed by replay setup filters
+                        if (detectedEntry && overlays.setupFilters[detectedEntry.setupName as ICTSetupType] !== false) {
+                             setAlert({ 
+                                 msg: `Replay: ${detectedEntry.type} Setup Detected (${detectedEntry.setupName})`, 
+                                 type: 'success' 
+                             });
+                        }
+                    }
+
+                    return { ...prev, index: nextIndex };
                 });
             }, replayMode.speed);
         }
         return () => clearInterval(interval);
-    }, [replayMode.active, replayMode.playing, replayMode.speed, data.length]);
+    }, [replayMode.active, replayMode.playing, replayMode.speed, data.length, entries, overlays.setupFilters]);
 
     const handleStartReplay = (trade?: EntrySignal) => {
         if (trade) {
@@ -212,6 +231,13 @@ const App: React.FC = () => {
             } else if (data.length > 0) {
                  startIndex = Math.floor(data.length / 2 + Math.random() * (data.length / 2));
             }
+            
+            // Apply selected filters to main overlay state for the replay session
+            setOverlays(prev => ({
+                ...prev,
+                setupFilters: { ...prev.setupFilters, ...replaySetupFilters }
+            }));
+
             setReplayMode({ active: true, index: startIndex, playing: false, speed: 500 });
             setFocusedEntry(null);
             setSetupVisibility('ALL');
@@ -312,9 +338,10 @@ const App: React.FC = () => {
                     <select value={asset} onChange={e => setAsset(e.target.value)} className="bg-[#0b0e11] text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500">
                         {['MGC (COMEX)', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'EURUSDT'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5 hidden sm:flex">
+                    {/* Timeframe Selector - Made Responsive */}
+                    <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5 overflow-x-auto max-w-[120px] md:max-w-none scrollbar-hide">
                         {['1m', '5m', '15m', '1h', '4h'].map(tf => ( 
-                            <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-0.5 text-xs rounded ${timeframe === tf ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}>{tf}</button> 
+                            <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-0.5 text-xs rounded shrink-0 ${timeframe === tf ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}>{tf}</button> 
                         ))}
                     </div>
                 </div>
@@ -436,7 +463,7 @@ const App: React.FC = () => {
                                 </ErrorBoundary>
                             </div>
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0e11]">
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0e11] overflow-y-auto">
                                 <div className="bg-[#151924] p-8 rounded-xl border border-[#2a2e39] max-w-md w-full shadow-2xl">
                                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
                                         <div className="bg-blue-600 p-2 rounded-lg"><BacktestIcon /></div>
@@ -462,6 +489,25 @@ const App: React.FC = () => {
                                                 </div>
                                             </div>
                                         </div>
+                                        
+                                        {/* Setup Filtering for Backtest */}
+                                        <div>
+                                            <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Detect Models</label>
+                                            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
+                                                {Object.keys(replaySetupFilters).map(model => (
+                                                    <label key={model} className={`flex items-center gap-2 p-2 rounded border cursor-pointer ${replaySetupFilters[model] ? 'bg-blue-900/20 border-blue-500/50' : 'bg-[#0b0e11] border-[#2a2e39]'}`}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={replaySetupFilters[model]} 
+                                                            onChange={() => setReplaySetupFilters(prev => ({...prev, [model]: !prev[model]}))}
+                                                            className="accent-blue-500"
+                                                        />
+                                                        <span className={`text-xs font-bold ${replaySetupFilters[model] ? 'text-white' : 'text-gray-500'}`}>{model}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         <button 
                                             onClick={() => handleStartReplay()}
                                             className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.02]"
@@ -543,6 +589,7 @@ const App: React.FC = () => {
                             focusedEntry={focusedEntry}
                             onReplay={handleStartReplay}
                             onViewOnChart={handleViewOnChart}
+                            currentAsset={asset}
                         />
                     </aside>
                 )}
