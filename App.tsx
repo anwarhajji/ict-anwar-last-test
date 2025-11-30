@@ -12,6 +12,8 @@ import { StatsPanel } from './components/panels/StatsPanel';
 import { SetupsPanel } from './components/panels/SetupsPanel';
 
 // Icons
+const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
+const XIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const ChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>;
 const ListIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>;
 const SettingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
@@ -66,6 +68,7 @@ const App: React.FC = () => {
     const [clickedEntry, setClickedEntry] = useState<EntrySignal | null>(null);
     const [hoveredEntry, setHoveredEntry] = useState<EntrySignal | null>(null);
     const [isScanning, setIsScanning] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     // Replay State
     const [replayMode, setReplayMode] = useState({ active: false, index: 0, playing: false, speed: 500 });
@@ -294,6 +297,14 @@ const App: React.FC = () => {
             {/* TOP BAR */}
             <header className="h-14 bg-[#151924] border-b border-[#2a2e39] flex items-center justify-between px-4 shrink-0 z-50">
                 <div className="flex items-center gap-4">
+                    {/* Hamburger Menu for Mobile */}
+                    <button 
+                        className="md:hidden text-gray-400 hover:text-white"
+                        onClick={() => setMobileMenuOpen(true)}
+                    >
+                        <MenuIcon />
+                    </button>
+
                     <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('DASHBOARD')}>
                         <span className="text-blue-500">ICT</span>MASTER
                     </div>
@@ -301,7 +312,7 @@ const App: React.FC = () => {
                     <select value={asset} onChange={e => setAsset(e.target.value)} className="bg-[#0b0e11] text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500">
                         {['MGC (COMEX)', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'EURUSDT'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5">
+                    <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5 hidden sm:flex">
                         {['1m', '5m', '15m', '1h', '4h'].map(tf => ( 
                             <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-0.5 text-xs rounded ${timeframe === tf ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}>{tf}</button> 
                         ))}
@@ -323,60 +334,58 @@ const App: React.FC = () => {
             </header>
 
             {/* MAIN LAYOUT */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden relative">
                 
-                {/* LEFT SIDEBAR (Navigation Rail) */}
+                {/* LEFT SIDEBAR (Desktop Navigation Rail) */}
                 <nav className="w-16 bg-[#151924] border-r border-[#2a2e39] hidden md:flex flex-col items-center py-4 gap-2 z-40">
-                    <SidebarItem 
-                        active={activeTab === 'DASHBOARD'} 
-                        onClick={() => setActiveTab('DASHBOARD')} 
-                        icon={<DashboardIcon/>} 
-                        label="Dashboard" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'CHART'} 
-                        onClick={() => setActiveTab('CHART')} 
-                        icon={<ChartIcon/>} 
-                        label="Chart" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'BACKTEST'} 
-                        onClick={() => setActiveTab('BACKTEST')} 
-                        icon={<BacktestIcon/>} 
-                        label="Replay / Backtest" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'SCANNER'} 
-                        onClick={() => setActiveTab('SCANNER')} 
-                        icon={<ListIcon/>} 
-                        label="Scanner" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'TRADING'} 
-                        onClick={() => setActiveTab('TRADING')} 
-                        icon={<TradeIcon/>} 
-                        label="Paper Trading" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'STATS'} 
-                        onClick={() => setActiveTab('STATS')} 
-                        icon={<StatsIcon/>} 
-                        label="Trade History" 
-                    />
-                    <SidebarItem 
-                        active={activeTab === 'SETUPS'} 
-                        onClick={() => setActiveTab('SETUPS')} 
-                        icon={<SetupsIcon/>} 
-                        label="ICT Models" 
-                    />
+                    <SidebarItem active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<DashboardIcon/>} label="Dashboard" />
+                    <SidebarItem active={activeTab === 'CHART'} onClick={() => setActiveTab('CHART')} icon={<ChartIcon/>} label="Chart" />
+                    <SidebarItem active={activeTab === 'BACKTEST'} onClick={() => setActiveTab('BACKTEST')} icon={<BacktestIcon/>} label="Replay / Backtest" />
+                    <SidebarItem active={activeTab === 'SCANNER'} onClick={() => setActiveTab('SCANNER')} icon={<ListIcon/>} label="Scanner" />
+                    <SidebarItem active={activeTab === 'TRADING'} onClick={() => setActiveTab('TRADING')} icon={<TradeIcon/>} label="Paper Trading" />
+                    <SidebarItem active={activeTab === 'STATS'} onClick={() => setActiveTab('STATS')} icon={<StatsIcon/>} label="Trade History" />
+                    <SidebarItem active={activeTab === 'SETUPS'} onClick={() => setActiveTab('SETUPS')} icon={<SetupsIcon/>} label="ICT Models" />
                     <div className="flex-1"></div>
-                    <SidebarItem 
-                        active={activeTab === 'SETTINGS'} 
-                        onClick={() => setActiveTab('SETTINGS')} 
-                        icon={<SettingsIcon/>} 
-                        label="Settings" 
-                    />
+                    <SidebarItem active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<SettingsIcon/>} label="Settings" />
                 </nav>
+
+                {/* MOBILE MENU OVERLAY (Full Sidebar Items) */}
+                {mobileMenuOpen && (
+                    <div className="absolute inset-0 z-[60] bg-[#151924] flex flex-col p-6 animate-in slide-in-from-left-full md:hidden">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-xl font-bold text-white">Main Menu</h2>
+                            <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-2 bg-gray-800 rounded-full">
+                                <XIcon />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button onClick={() => { setActiveTab('DASHBOARD'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'DASHBOARD' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <DashboardIcon /> <span className="text-sm font-bold">Dashboard</span>
+                            </button>
+                            <button onClick={() => { setActiveTab('CHART'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'CHART' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <ChartIcon /> <span className="text-sm font-bold">Chart</span>
+                            </button>
+                            <button onClick={() => { setActiveTab('SCANNER'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SCANNER' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <ListIcon /> <span className="text-sm font-bold">Scanner</span>
+                            </button>
+                             <button onClick={() => { setActiveTab('TRADING'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'TRADING' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <TradeIcon /> <span className="text-sm font-bold">Trading</span>
+                            </button>
+                             <button onClick={() => { setActiveTab('SETUPS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SETUPS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <SetupsIcon /> <span className="text-sm font-bold">Models</span>
+                            </button>
+                             <button onClick={() => { setActiveTab('STATS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'STATS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <StatsIcon /> <span className="text-sm font-bold">History</span>
+                            </button>
+                             <button onClick={() => { setActiveTab('BACKTEST'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'BACKTEST' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <BacktestIcon /> <span className="text-sm font-bold">Backtest</span>
+                            </button>
+                             <button onClick={() => { setActiveTab('SETTINGS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SETTINGS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                <SettingsIcon /> <span className="text-sm font-bold">Settings</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* CENTER CONTENT AREA */}
                 <main className="flex-1 relative bg-[#0b0e11] flex flex-col min-w-0">
@@ -509,9 +518,15 @@ const App: React.FC = () => {
                     )}
                 </main>
 
-                {/* RIGHT SIDEBAR (Tools) */}
+                {/* RIGHT SIDEBAR (Tools) - Modified for Mobile Visibility */}
                 {isSidebarPanelOpen && (
-                    <aside className="hidden md:flex w-[320px] bg-[#151924] border-l border-[#2a2e39] flex-col z-30 shadow-xl">
+                    <aside className="absolute inset-0 z-40 md:static md:flex w-full md:w-[320px] bg-[#151924] border-l border-[#2a2e39] flex-col shadow-xl">
+                        {/* Mobile Close Button for Side Panel */}
+                        <div className="md:hidden p-2 bg-[#1e222d] border-b border-[#2a2e39] flex justify-end">
+                            <button onClick={() => setActiveTab('CHART')} className="text-gray-400 hover:text-white flex items-center gap-2 text-sm font-bold bg-gray-800 px-3 py-1 rounded">
+                                Close Panel <XIcon />
+                            </button>
+                        </div>
                         <Panels 
                             activeTab={activeTab} setActiveTab={setActiveTab}
                             structure={structure} entries={entries} setClickedEntry={setClickedEntry}
@@ -533,7 +548,7 @@ const App: React.FC = () => {
                 )}
             </div>
             
-            {/* MOBILE NAVIGATION */}
+            {/* MOBILE NAVIGATION BAR (Bottom) */}
              <nav className="md:hidden h-16 bg-[#151924] border-t border-[#2a2e39] flex items-center justify-around shrink-0 z-50 pb-safe">
                  <button onClick={() => setActiveTab('DASHBOARD')} className={`flex flex-col items-center gap-1 ${activeTab === 'DASHBOARD' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <DashboardIcon /> <span className="text-[10px]">Home</span>

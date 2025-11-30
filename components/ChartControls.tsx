@@ -37,10 +37,10 @@ const SetupToggleRow = ({ label, active, onToggle, description }: { label: strin
                 <div className="flex items-center gap-2">
                     <button 
                         onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-                        className={`p-1 rounded hover:bg-gray-700 transition-colors ${expanded ? 'text-blue-400' : 'text-gray-500'}`}
+                        className={`p-2 rounded hover:bg-gray-700 transition-colors ${expanded ? 'text-white' : 'text-blue-400'}`}
                         title="Click for Explication"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                     </button>
                     <span className="text-sm text-gray-300">{label}</span>
                 </div>
