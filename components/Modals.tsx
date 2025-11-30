@@ -1,56 +1,141 @@
-import React, { useMemo, ReactNode } from 'react';
+import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
 import { EntrySignal } from '../types';
 
-export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClose: () => void }) => (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center pointer-events-auto p-4" onClick={onClose}>
-        <div className="bg-[#1e222d] border border-blue-500 p-6 rounded shadow-2xl max-w-md w-full relative" onClick={e => e.stopPropagation()}>
-            <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white text-lg p-2">✕</button>
-            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+export const EntryDetailModal = ({ entry, onClose }: { entry: EntrySignal, onClose: () => void }) => {
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    // Initial positioning center screen
+    useEffect(() => {
+        setPosition({ 
+            x: Math.max(20, window.innerWidth / 2 - 200), 
+            y: Math.max(20, window.innerHeight / 2 - 250) 
+        });
+    }, []);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (panelRef.current) {
+            const rect = panelRef.current.getBoundingClientRect();
+            setDragOffset({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            });
+            setIsDragging(true);
+        }
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isDragging) {
+                setPosition({
+                    x: e.clientX - dragOffset.x,
+                    y: e.clientY - dragOffset.y
+                });
+            }
+        };
+        const handleMouseUp = () => setIsDragging(false);
+
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, dragOffset]);
+
+    return (
+        <div 
+            ref={panelRef}
+            style={{ 
+                left: position.x, 
+                top: position.y,
+                position: 'fixed'
+            }}
+            className="z-[100] bg-[#1e222d] border border-blue-500 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.6)] max-w-md w-full animate-in fade-in zoom-in-95 flex flex-col"
+            onClick={e => e.stopPropagation()}
+        >
+            <div 
+                className="flex justify-between items-center p-4 border-b border-gray-700 cursor-move bg-[#151924] rounded-t-lg select-none"
+                onMouseDown={handleMouseDown}
+            >
                 <h3 className={`text-2xl font-bold ${entry.type === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
                     {entry.type} SETUP
                 </h3>
-                <div className="text-right">
-                    <div className="text-xs text-gray-500">DATE</div>
+                <button 
+                    onClick={onClose} 
+                    className="text-gray-400 hover:text-white text-lg p-1 hover:bg-gray-700 rounded transition-colors"
+                >
+                    ✕
+                </button>
+            </div>
+
+            <div className="p-6">
+                <div className="text-right -mt-2 mb-4">
+                    <div className="text-xs text-gray-500 uppercase font-bold">Entry Date</div>
                     <div className="text-white text-sm font-mono">{new Date((entry.time as number) * 1000).toLocaleString()}</div>
                 </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-black/20 p-3 rounded">
-                    <div className="text-xs text-gray-500 mb-1">ENTRY PRICE</div>
-                    <div className="text-xl font-mono">{entry.price.toFixed(2)}</div>
-                </div>
-                <div className="bg-black/20 p-3 rounded">
-                    <div className="text-xs text-gray-500 mb-1">RESULT (2R)</div>
-                    <div className={`text-xl font-bold ${entry.backtestResult === 'WIN' ? 'text-green-500' : entry.backtestResult === 'LOSS' ? 'text-red-500' : 'text-yellow-500'}`}>
-                        {entry.backtestResult || 'PENDING'}
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-[#0b0e11] p-3 rounded border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">ENTRY PRICE</div>
+                        <div className="text-xl font-mono text-white">{entry.price.toFixed(2)}</div>
+                    </div>
+                    <div className="bg-[#0b0e11] p-3 rounded border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">RESULT (2R)</div>
+                        <div className={`text-xl font-bold ${entry.backtestResult === 'WIN' ? 'text-green-500' : entry.backtestResult === 'LOSS' ? 'text-red-500' : 'text-yellow-500'}`}>
+                            {entry.backtestResult || 'PENDING'}
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div className="mb-4">
-                <div className="text-xs font-bold text-gray-400 mb-2 uppercase">Confluence & Strategy</div>
-                <ul className="space-y-2">
-                    {entry.confluences.map((c, i) => (
-                        <li key={i} className="flex items-center gap-2 text-sm text-gray-300">
-                            <span className="text-green-500">✓</span> {c}
-                        </li>
-                    ))}
-                    <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-blue-500">ℹ</span> Style: {entry.tradingStyle}</li>
-                    <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-purple-500">ℹ</span> PO3 Phase: {entry.po3Phase}</li>
-                </ul>
-            </div>
-            <div className="bg-gray-800/50 p-3 rounded border border-gray-700">
-                <div className="flex justify-between text-sm font-mono mb-1"><span className="text-green-500">Target (TP):</span><span>{entry.tp.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm font-mono mb-1"><span className="text-red-500">Stop (SL):</span><span>{entry.sl.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm font-mono pt-2 border-t border-gray-700">
-                    <span className="text-yellow-500">Lot Size (Risk 1%):</span>
-                    <span>{entry.lotSize?.toFixed(3)}</span>
+
+                <div className="mb-4">
+                    <div className="text-xs font-bold text-gray-400 mb-2 uppercase">Confluence & Strategy</div>
+                    <ul className="space-y-2">
+                        {entry.confluences.map((c, i) => (
+                            <li key={i} className="flex items-center gap-2 text-sm text-gray-300">
+                                <span className="text-green-500">✓</span> {c}
+                            </li>
+                        ))}
+                        <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-blue-500">ℹ</span> Style: {entry.tradingStyle}</li>
+                        <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-purple-500">ℹ</span> PO3 Phase: {entry.po3Phase}</li>
+                    </ul>
                 </div>
-                <div className="mt-2 text-center text-xs text-gray-500">PnL if taken: <span className={entry.backtestPnL && entry.backtestPnL > 0 ? 'text-green-400' : 'text-red-400'}>${entry.backtestPnL?.toFixed(2)}</span></div>
+
+                <div className="bg-gray-800/30 p-4 rounded border border-gray-700 space-y-2">
+                    <div className="flex justify-between text-sm font-mono">
+                        <span className="text-green-500 font-bold">Target (TP):</span>
+                        <span className="text-white">{entry.tp.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-mono">
+                        <span className="text-red-500 font-bold">Stop (SL):</span>
+                        <span className="text-white">{entry.sl.toFixed(2)}</span>
+                    </div>
+                    <div className="h-px bg-gray-700 my-1"></div>
+                    <div className="flex justify-between text-sm font-mono items-center">
+                        <span className="text-yellow-500">Lot Size (Risk 1%):</span>
+                        <span className="text-white bg-gray-700 px-2 rounded">{entry.lotSize?.toFixed(3)}</span>
+                    </div>
+                    <div className="mt-2 text-center text-xs text-gray-500 pt-2">
+                        PnL if taken: <span className={`font-bold ${entry.backtestPnL && entry.backtestPnL > 0 ? 'text-green-400' : 'text-red-400'}`}>${entry.backtestPnL?.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div className="mt-6 text-center">
+                    <button 
+                        onClick={onClose} 
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg w-full font-bold transition-all shadow-lg hover:shadow-blue-900/50"
+                    >
+                        ACKNOWLEDGE
+                    </button>
+                </div>
             </div>
-            <div className="mt-4 text-center"><button onClick={onClose} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded w-full font-bold transition-colors">ACKNOWLEDGE</button></div>
         </div>
-    </div>
-);
+    );
+};
 
 export const TopSetupsModal = ({ entries, onClose }: { entries: EntrySignal[], onClose: () => void }) => {
     const topSetups = useMemo(() => {
@@ -103,10 +188,13 @@ interface ErrorBoundaryState {
     hasError: boolean;
 }
 
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    state: ErrorBoundaryState = { hasError: false };
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    constructor(props: ErrorBoundaryProps) {
+        super(props);
+        this.state = { hasError: false };
+    }
 
-    static getDerivedStateFromError(error: any) {
+    static getDerivedStateFromError(error: any): ErrorBoundaryState {
         return { hasError: true };
     }
     

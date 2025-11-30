@@ -4,6 +4,7 @@ import { UTCTimestamp } from 'lightweight-charts';
 export { UTCTimestamp };
 
 export type SessionType = 'ASIA' | 'LONDON' | 'NEW_YORK' | 'NONE';
+export type ICTSetupType = '2022 Model' | 'Silver Bullet' | 'Unicorn' | 'OTE' | 'Breaker' | 'Standard FVG';
 
 export interface CandleData {
     time: UTCTimestamp;
@@ -72,10 +73,10 @@ export interface EntrySignal {
     backtestPnL?: number;
     lotSize?: number;
     exitTime?: UTCTimestamp;
-    setupName?: string;
+    setupName: ICTSetupType | string; // Updated to specific type
     setupGrade?: string;
-    confluenceLevel?: number; // The exact price level (OB/FVG) that triggered the entry
-    timeframe?: string;       // The timeframe this setup was detected on
+    confluenceLevel?: number; 
+    timeframe?: string;
 }
 
 export interface BacktestStats {
@@ -107,6 +108,10 @@ export interface OverlayState {
     backtestMarkers: boolean;
     macro: boolean;
     historicalTradeLines: boolean;
+    // Granular Setup Visibility
+    setupFilters: {
+        [key in ICTSetupType]: boolean;
+    };
 }
 
 export interface ColorTheme {

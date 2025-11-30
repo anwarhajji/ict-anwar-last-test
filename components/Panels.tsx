@@ -38,7 +38,7 @@ interface PanelProps {
 
 export const Panels: React.FC<PanelProps> = (props) => {
     // If on main page tabs, show nothing in the panel container
-    if (['CHART', 'DASHBOARD', 'BACKTEST', 'STATS'].includes(props.activeTab) || !props.activeTab) return null;
+    if (['CHART', 'DASHBOARD', 'BACKTEST', 'STATS', 'SETUPS'].includes(props.activeTab) || !props.activeTab) return null;
 
     const commonProps = { onClose: () => props.setActiveTab('CHART') };
 
@@ -67,12 +67,12 @@ export const Panels: React.FC<PanelProps> = (props) => {
                 autoTrade={props.autoTrade} setAutoTrade={props.setAutoTrade} 
                 {...commonProps}
             />;
-        case 'SETUPS': 
+        case 'SETUPS': // Note: This case might be redundant if SETUPS is treated as a main tab, but keeping for compatibility if moved to sidebar.
             return <SetupsPanel 
-                obs={props.obs} 
-                data={props.data} 
                 entries={props.entries} 
                 setClickedEntry={props.setClickedEntry} 
+                overlays={props.overlays}
+                setOverlays={props.setOverlays}
                 {...commonProps}
             />;
         case 'SETTINGS':

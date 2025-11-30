@@ -12,7 +12,7 @@ import {
     IPriceLine,
     CrosshairMode
 } from 'lightweight-charts';
-import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, StructurePoint, TradeEntry, ColorTheme } from '../types';
+import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, StructurePoint, TradeEntry, ColorTheme, ICTSetupType } from '../types';
 import { drawCanvasLayer } from '../services/chartOverlay';
 import { ChartControls } from './ChartControls';
 import { ReplayControls } from './ReplayControls';
@@ -51,6 +51,7 @@ interface ChartProps {
         changeSpeed: () => void;
         exit: () => void;
         seek: (val: number) => void;
+        showAll?: () => void;
     }
 }
 
@@ -65,10 +66,18 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     const mousePos = useRef<{ x: number, y: number } | null>(null);
     const drawCanvasOverlayRef = useRef<() => void>(() => {});
 
-    // Filtered Entries based on Visibility Mode and Replay Time
+    // Filtered Entries based on Visibility Mode, Setup Types, and Replay Time
     const visibleEntries = useMemo(() => {
         let list = props.entries;
         
+        // Filter by Setup Type (Granular Visibility)
+        list = list.filter(e => {
+            const type = e.setupName as ICTSetupType;
+            // Default to true if not strictly defined
+            if (props.overlays.setupFilters && props.overlays.setupFilters[type] === false) return false;
+            return true;
+        });
+
         // If replay active, filter out entries from the future
         if (props.replayState.active && props.data.length > 0) {
             const lastTime = props.data[props.data.length - 1].time as number;
@@ -77,7 +86,6 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
 
         if (props.setupVisibility === 'NONE') return [];
         if (props.setupVisibility === 'FOCUS' && props.focusedEntry) {
-            // Check if focused entry is still valid in replay time
             if (props.replayState.active) {
                 const lastTime = props.data[props.data.length - 1].time as number;
                 if ((props.focusedEntry.time as number) > lastTime) return []; 
@@ -85,19 +93,16 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             return [props.focusedEntry];
         }
         return list;
-    }, [props.entries, props.setupVisibility, props.focusedEntry, props.replayState.active, props.data]);
+    }, [props.entries, props.setupVisibility, props.focusedEntry, props.replayState.active, props.data, props.overlays.setupFilters]);
 
-    // Zoom to focused entry effect (Only when not in replay or initial replay setup)
+    // Zoom to focused entry effect
     useEffect(() => {
         if (props.setupVisibility === 'FOCUS' && props.focusedEntry && chartRef.current && props.data.length > 0) {
-            // Avoid auto-zooming constantly during replay playback to allow user control
             if (props.replayState.active && props.replayState.playing) return;
 
             const chart = chartRef.current;
             const entryTime = props.focusedEntry.time as number;
             const exitTime = props.focusedEntry.exitTime as number | undefined;
-            
-            // Find index of the entry candle
             const entryIndex = props.data.findIndex(d => d.time === entryTime);
             
             if (entryIndex !== -1) {
@@ -108,10 +113,8 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
                          toIndex = exitIndex + 20; 
                     }
                 }
-                
                 const fromIndex = Math.max(0, entryIndex - 30); 
                 toIndex = Math.min(props.data.length - 1, toIndex);
-                
                 chart.timeScale().setVisibleLogicalRange({ from: fromIndex, to: toIndex });
             }
         }
@@ -122,13 +125,8 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
         if (!chartContainerRef.current) return;
         
         if (chartRef.current) {
-            try {
-                chartRef.current.remove();
-            } catch (e) { console.warn('Chart cleanup warning', e); }
+            try { chartRef.current.remove(); } catch (e) { }
             chartRef.current = null;
-            candleSeriesRef.current = null;
-            sessionSeriesRef.current = null;
-            macroSeriesRef.current = null;
         }
 
         const chart = createChart(chartContainerRef.current, {
@@ -138,7 +136,6 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             height: chartContainerRef.current.clientHeight,
             timeScale: { timeVisible: true, secondsVisible: false },
             rightPriceScale: { visible: true, borderColor: '#2a2e39' },
-            leftPriceScale: { visible: false, borderColor: '#2a2e39' },
             crosshair: {
                 mode: CrosshairMode.Normal,
                 vertLine: { labelBackgroundColor: '#2962FF', color: '#2a2e39' },
@@ -224,15 +221,12 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
              const coloredData = props.data.map((d: any) => {
                 const isFocused = props.setupVisibility === 'FOCUS' && props.focusedEntry && d.time === props.focusedEntry.time;
                 const isEntry = visibleEntries.find((e: any) => e.time === d.time);
-                const hour = new Date(d.time * 1000).getUTCHours();
-                const isSB = (hour === 14 || hour === 9 || hour === 3);
                 
                 let color = undefined; 
                 let borderColor = undefined;
 
                 if (isFocused) { color = '#ffffff'; borderColor = '#ffffff'; }
                 else if (isEntry && isEntry.score >= 7) { color = '#FFFF00'; borderColor = '#FFFF00'; }
-                else if (isSB && props.overlays.silverBullet) { borderColor = '#FFD700'; }
                 
                 return { ...d, color, borderColor };
             });
@@ -243,9 +237,7 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
                  const range = timeScale.getVisibleLogicalRange();
                  if (range) {
                     const distFromRight = props.data.length - range.to;
-                    if (distFromRight < 10) {
-                         timeScale.scrollToRealTime(); 
-                    }
+                    if (distFromRight < 10) timeScale.scrollToRealTime(); 
                  }
             }
         }
@@ -286,33 +278,17 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
              activeTradeLinesRef.current = [];
             
              if (props.position) {
-                // Highlight ACTIVE trade: Thicker lines and Neon Colors
                 activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                    price: props.position.price, 
-                    color: '#00B0FF', // Neon Blue
-                    lineWidth: 3, 
-                    lineStyle: 0, 
-                    axisLabelVisible: true, 
-                    title: 'ENTRY' 
+                    price: props.position.price, color: '#00B0FF', lineWidth: 3, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY' 
                 }));
                 if (props.position.stopLoss) {
                     activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                        price: props.position.stopLoss, 
-                        color: '#FF3D00', // Neon Red
-                        lineWidth: 2, 
-                        lineStyle: 2, 
-                        axisLabelVisible: true, 
-                        title: 'SL' 
+                        price: props.position.stopLoss, color: '#FF3D00', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' 
                     }));
                 }
                 if (props.position.takeProfit) {
                     activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                        price: props.position.takeProfit, 
-                        color: '#2962FF', // Neon Blue (Updated from Green)
-                        lineWidth: 2, 
-                        lineStyle: 2, 
-                        axisLabelVisible: true, 
-                        title: 'TP' 
+                        price: props.position.takeProfit, color: '#2962FF', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'TP' 
                     }));
                 }
             }
@@ -336,8 +312,9 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             if (props.overlays.backtestMarkers && props.setupVisibility !== 'NONE') {
                 visibleEntries.forEach((e: any) => {
                     const grade = e.setupGrade ? `[${e.setupGrade}] ` : '';
+                    const shortName = e.setupName ? e.setupName.split(' ')[0] : e.type;
                     // @ts-ignore
-                    markers.push({ time: e.time, position: e.type==='LONG'?'belowBar':'aboveBar', color: e.type==='LONG'?'#00E676':'#FF1744', shape: e.type==='LONG'?'arrowUp':'arrowDown', text: `${grade}${e.type}` });
+                    markers.push({ time: e.time, position: e.type==='LONG'?'belowBar':'aboveBar', color: e.type==='LONG'?'#00E676':'#FF1744', shape: e.type==='LONG'?'arrowUp':'arrowDown', text: `${shortName}` });
                 });
             }
             // @ts-ignore
@@ -369,7 +346,6 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
         
         const timeScale = chart.timeScale();
 
-        // Pass props.setupVisibility to allow drawing forced focused setups
         drawCanvasLayer(
             ctx, timeScale, series, props.data, props.obs, props.fvgs, visibleEntries, props.overlays, props.colors, props.pdRange, container.clientWidth, container.clientHeight, props.htfObs, props.htfFvgs, props.setupVisibility
         );
@@ -401,6 +377,7 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
                 setSetupVisibility={props.setSetupVisibility}
                 onReload={props.onReload}
                 focusedEntry={props.focusedEntry}
+                isReplayActive={props.replayState.active}
             />
 
             <ReplayControls 
@@ -414,6 +391,8 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
                 onSpeedChange={props.onReplayControl.changeSpeed}
                 onExit={props.onReplayControl.exit}
                 onSeek={(e) => props.onReplayControl.seek(parseInt(e.target.value))}
+                focusedEntry={props.focusedEntry}
+                onShowAll={props.onReplayControl.showAll}
             />
         </div>
     );

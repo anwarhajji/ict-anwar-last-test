@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig } from './types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState } from './types';
 import { fetchCandles, getHtf } from './services/api';
 import { detectStructure, detectOrderBlocks, detectFVG, detectEntries } from './services/ict';
 import { performBacktest } from './services/backtest';
@@ -9,6 +9,7 @@ import { EntryDetailModal, TopSetupsModal, ToastNotification, ErrorBoundary } fr
 import { Panels } from './components/Panels';
 import { DashboardPanel } from './components/panels/DashboardPanel';
 import { StatsPanel } from './components/panels/StatsPanel';
+import { SetupsPanel } from './components/panels/SetupsPanel';
 
 // Icons
 const ChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>;
@@ -18,6 +19,31 @@ const TradeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" heigh
 const StatsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>;
 const DashboardIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>;
 const BacktestIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/></svg>;
+const SetupsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>;
+
+// Helper Component for Sidebar Items
+const SidebarItem = ({ 
+    active, 
+    onClick, 
+    icon, 
+    label 
+}: { 
+    active: boolean; 
+    onClick: () => void; 
+    icon: React.ReactNode; 
+    label: string 
+}) => (
+    <button 
+        onClick={onClick} 
+        className={`group relative w-full p-3 flex flex-col items-center gap-1 transition-colors ${active ? 'text-blue-500 bg-gray-800/50 border-r-2 border-blue-500' : 'text-gray-500 hover:text-white hover:bg-gray-800/30'}`}
+    >
+        {icon}
+        {/* Tooltip */}
+        <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl border border-gray-700">
+            {label}
+        </span>
+    </button>
+);
 
 const App: React.FC = () => {
     // --- STATE ---
@@ -44,17 +70,25 @@ const App: React.FC = () => {
     // Replay State
     const [replayMode, setReplayMode] = useState({ active: false, index: 0, playing: false, speed: 500 });
     const [replayDateInput, setReplayDateInput] = useState('');
+    const dateInputRef = useRef<HTMLInputElement>(null);
 
     // Visibility & Focus State
-    // Default to 'NONE' to keep setups hidden by default
     const [setupVisibility, setSetupVisibility] = useState<'ALL'|'FOCUS'|'NONE'>('NONE');
     const [focusedEntry, setFocusedEntry] = useState<EntrySignal | null>(null);
 
     // Configuration
-    const [overlays, setOverlays] = useState({
+    const [overlays, setOverlays] = useState<OverlayState>({
         obs: true, fvgs: true, killzones: true, silverBullet: true, pdZones: true,
         internalStructure: true, swingStructure: true, mtf: true, backtestMarkers: true,
-        macro: true, historicalTradeLines: false // Default to false
+        macro: true, historicalTradeLines: false,
+        setupFilters: {
+            '2022 Model': true,
+            'Silver Bullet': true,
+            'Unicorn': true,
+            'OTE': true,
+            'Breaker': true,
+            'Standard FVG': true
+        }
     });
     const [colors, setColors] = useState({ obBull: '#00E676', obBear: '#FF1744', fvgBull: '#00BCD4', fvgBear: '#2962FF' });
     const [config, setConfig] = useState({ swingLength: 5, obThreshold: 1.2, fvgExtend: 10 });
@@ -78,12 +112,18 @@ const App: React.FC = () => {
             const candles = await fetchCandles(asset, timeframe);
             const htfTf = getHtf(timeframe);
             let candlesHtf: CandleData[] = [];
-            try { candlesHtf = await fetchCandles(asset, htfTf, 200); } catch (e) { console.warn("HTF Data fetch failed"); }
+            let htfBias: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
+
+            try { 
+                candlesHtf = await fetchCandles(asset, htfTf, 200); 
+                const htfStructure = detectStructure(candlesHtf, 5);
+                if (htfStructure.length > 0) {
+                    htfBias = htfStructure[htfStructure.length-1].direction;
+                }
+            } catch (e) { console.warn("HTF Data fetch failed"); }
 
             setData(candles);
             
-            // If in replay, ensure we update max index if needed, or if live update, we might need to handle it.
-            // But for simplicity, replay pauses live updates mentally.
             if (!replayMode.active) {
                 setReplayMode(prev => ({...prev, index: candles.length}));
             }
@@ -105,7 +145,9 @@ const App: React.FC = () => {
             }
             const fvgsForDetection = isLowTf ? _htfFvgs : _fvgs; 
 
-            const _rawEntries = detectEntries(candles, obsForDetection, fvgsForDetection, timeframe);
+            // Detect Entries using new Logic with HTF Bias and Structure
+            const _rawEntries = detectEntries(candles, obsForDetection, fvgsForDetection, _structure, timeframe, htfBias);
+            
             const _filteredEntries = _rawEntries.filter(e => {
                 const meetsProb = e.winProbability >= simulation.minWinProbability;
                 // @ts-ignore
@@ -154,21 +196,17 @@ const App: React.FC = () => {
         if (trade) {
             const tradeIndex = data.findIndex(d => d.time === trade.time);
             if (tradeIndex === -1) return;
-            // Start 50 candles before execution
             const startIndex = Math.max(0, tradeIndex - 50);
             setReplayMode({ active: true, index: startIndex, playing: false, speed: 500 });
             setFocusedEntry(trade);
             setSetupVisibility('FOCUS');
         } else {
-            // Manual Start from date or random
             let startIndex = 0;
             if (replayDateInput && data.length > 0) {
                  const targetTime = new Date(replayDateInput).getTime() / 1000;
-                 // Find closest candle
                  const closest = data.findIndex(d => (d.time as number) >= targetTime);
                  startIndex = closest !== -1 ? closest : 0;
             } else if (data.length > 0) {
-                 // Random point in last 50% of data
                  startIndex = Math.floor(data.length / 2 + Math.random() * (data.length / 2));
             }
             setReplayMode({ active: true, index: startIndex, playing: false, speed: 500 });
@@ -186,16 +224,18 @@ const App: React.FC = () => {
             setSetupVisibility('ALL');
             setFocusedEntry(null);
         },
-        seek: (val: number) => setReplayMode(p => ({ ...p, index: val }))
+        seek: (val: number) => setReplayMode(p => ({ ...p, index: val })),
+        showAll: () => {
+             setSetupVisibility('ALL');
+             setOverlays(prev => ({...prev, historicalTradeLines: true}));
+        }
     };
 
-    // Calculate displayed data based on replay
     const displayedData = useMemo(() => {
         if (!replayMode.active) return data;
         return data.slice(0, replayMode.index);
     }, [data, replayMode.active, replayMode.index]);
 
-    // Filter indicators for replay to avoid look-ahead
     const displayedObs = useMemo(() => {
          if (!replayMode.active) return obs;
          const lastTime = displayedData.length > 0 ? displayedData[displayedData.length-1].time as number : 0;
@@ -207,7 +247,6 @@ const App: React.FC = () => {
          const lastTime = displayedData.length > 0 ? displayedData[displayedData.length-1].time as number : 0;
          return fvgs.filter(f => (f.time as number) <= lastTime);
     }, [fvgs, replayMode.active, displayedData]);
-
 
     // --- ACTIONS ---
     const enterTrade = (type: 'LONG'|'SHORT', price: number, sl: number, tp: number) => { 
@@ -230,24 +269,20 @@ const App: React.FC = () => {
         if (activeTab === 'DASHBOARD' || activeTab === 'STATS') setActiveTab('CHART');
     };
 
+    // New Handler: View on Chart with Draggable Modal open
+    const handleViewOnChart = (entry: EntrySignal) => {
+        setFocusedEntry(entry);
+        setSetupVisibility('FOCUS');
+        setClickedEntry(entry); // Triggers the draggable EntryDetailModal
+        setActiveTab('CHART');
+    };
+
     const thirtyDaysAgoTimestamp = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
     const recentHistory = entries.filter(e => e.backtestResult !== 'PENDING' && (e.time as number) > thirtyDaysAgoTimestamp);
     const isLowTf = ['1m', '3m'].includes(timeframe);
     const visibleFvgs = isLowTf ? [] : displayedFvgs;
 
-    // --- LAYOUT LOGIC ---
-    const isDashboard = activeTab === 'DASHBOARD';
-    // Sidebar panels are active if tab is NOT Dashboard, NOT Chart, NOT Backtest, and NOT Stats
-    const isSidebarPanelOpen = !['DASHBOARD', 'CHART', 'BACKTEST', 'STATS'].includes(activeTab);
-
-    // --- RENDER HELPERS ---
-    const SideNavItem = ({ icon, label, id }: { icon: any, label: string, id: string }) => (
-        <button onClick={() => setActiveTab(id)} className={`w-full p-3 flex flex-col items-center gap-1 transition-colors ${activeTab === id ? 'text-blue-500 bg-gray-800/50 border-r-2 border-blue-500' : 'text-gray-500 hover:text-white hover:bg-gray-800/30'}`}>
-            {icon}
-        </button>
-    );
-
-    // Safety fallback for stats
+    const isSidebarPanelOpen = !['DASHBOARD', 'CHART', 'BACKTEST', 'STATS', 'SETUPS'].includes(activeTab);
     const safeStats = backtestStats || {totalTrades:0, wins:0, losses:0, winRate:0, netPnL:0, profitFactor:0, maxDrawdown:0, equityCurve:[]};
 
     return (
@@ -292,21 +327,61 @@ const App: React.FC = () => {
                 
                 {/* LEFT SIDEBAR (Navigation Rail) */}
                 <nav className="w-16 bg-[#151924] border-r border-[#2a2e39] hidden md:flex flex-col items-center py-4 gap-2 z-40">
-                    <SideNavItem icon={<DashboardIcon/>} label="Dash" id="DASHBOARD" />
-                    <SideNavItem icon={<ChartIcon/>} label="Chart" id="CHART" />
-                    <SideNavItem icon={<BacktestIcon/>} label="Replay" id="BACKTEST" />
-                    <SideNavItem icon={<ListIcon/>} label="Scanner" id="SCANNER" />
-                    <SideNavItem icon={<TradeIcon/>} label="Trade" id="TRADING" />
-                    <SideNavItem icon={<StatsIcon/>} label="Stats" id="STATS" />
+                    <SidebarItem 
+                        active={activeTab === 'DASHBOARD'} 
+                        onClick={() => setActiveTab('DASHBOARD')} 
+                        icon={<DashboardIcon/>} 
+                        label="Dashboard" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'CHART'} 
+                        onClick={() => setActiveTab('CHART')} 
+                        icon={<ChartIcon/>} 
+                        label="Chart" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'BACKTEST'} 
+                        onClick={() => setActiveTab('BACKTEST')} 
+                        icon={<BacktestIcon/>} 
+                        label="Replay / Backtest" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'SCANNER'} 
+                        onClick={() => setActiveTab('SCANNER')} 
+                        icon={<ListIcon/>} 
+                        label="Scanner" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'TRADING'} 
+                        onClick={() => setActiveTab('TRADING')} 
+                        icon={<TradeIcon/>} 
+                        label="Paper Trading" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'STATS'} 
+                        onClick={() => setActiveTab('STATS')} 
+                        icon={<StatsIcon/>} 
+                        label="Trade History" 
+                    />
+                    <SidebarItem 
+                        active={activeTab === 'SETUPS'} 
+                        onClick={() => setActiveTab('SETUPS')} 
+                        icon={<SetupsIcon/>} 
+                        label="ICT Models" 
+                    />
                     <div className="flex-1"></div>
-                    <SideNavItem icon={<SettingsIcon/>} label="Settings" id="SETTINGS" />
+                    <SidebarItem 
+                        active={activeTab === 'SETTINGS'} 
+                        onClick={() => setActiveTab('SETTINGS')} 
+                        icon={<SettingsIcon/>} 
+                        label="Settings" 
+                    />
                 </nav>
 
                 {/* CENTER CONTENT AREA */}
                 <main className="flex-1 relative bg-[#0b0e11] flex flex-col min-w-0">
                     
                     {activeTab === 'DASHBOARD' ? (
-                        /* DASHBOARD VIEW */
                         <DashboardPanel 
                             balance={balance} 
                             backtestStats={backtestStats} 
@@ -315,7 +390,6 @@ const App: React.FC = () => {
                             onAssetChange={setAsset}
                         />
                     ) : activeTab === 'STATS' ? (
-                        /* STATS / TRADE HISTORY PAGE */
                         <StatsPanel 
                             backtestStats={safeStats} 
                             recentHistory={recentHistory} 
@@ -324,8 +398,16 @@ const App: React.FC = () => {
                             focusedEntry={focusedEntry}
                             onReplay={handleStartReplay}
                         />
+                    ) : activeTab === 'SETUPS' ? (
+                        <SetupsPanel 
+                            entries={entries} 
+                            setClickedEntry={setClickedEntry} 
+                            overlays={overlays}
+                            setOverlays={setOverlays}
+                            onClose={() => setActiveTab('CHART')}
+                            onViewOnChart={handleViewOnChart}
+                        />
                     ) : activeTab === 'BACKTEST' ? (
-                        /* BACKTEST / REPLAY VIEW */
                         replayMode.active ? (
                              <div className="flex-1 relative h-full">
                                 <ErrorBoundary>
@@ -345,59 +427,50 @@ const App: React.FC = () => {
                                 </ErrorBoundary>
                             </div>
                         ) : (
-                            /* BACKTEST CONFIG SCREEN */
                             <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0e11]">
                                 <div className="bg-[#151924] p-8 rounded-xl border border-[#2a2e39] max-w-md w-full shadow-2xl">
                                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
                                         <div className="bg-blue-600 p-2 rounded-lg"><BacktestIcon /></div>
                                         Replay Simulator
                                     </h2>
-                                    
                                     <div className="space-y-6">
                                         <div>
                                             <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Select Asset</label>
                                             <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-white font-mono">{asset}</div>
                                         </div>
-
                                         <div>
                                             <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Start Date</label>
-                                            <input 
-                                                type="datetime-local" 
-                                                className="w-full bg-[#0b0e11] text-white p-3 rounded border border-[#2a2e39] focus:border-blue-500 outline-none"
-                                                value={replayDateInput}
-                                                onChange={e => setReplayDateInput(e.target.value)}
-                                            />
-                                            <p className="text-xs text-gray-500 mt-2">Leave empty to start from a random point.</p>
+                                            <div className="relative flex items-center group cursor-pointer" onClick={() => { try { dateInputRef.current?.showPicker() } catch(e) {} }}>
+                                                <input 
+                                                    ref={dateInputRef}
+                                                    type="datetime-local" 
+                                                    className="w-full bg-[#0b0e11] text-white p-3 rounded border border-[#2a2e39] focus:border-blue-500 outline-none cursor-pointer pr-10"
+                                                    value={replayDateInput}
+                                                    onChange={e => setReplayDateInput(e.target.value)}
+                                                />
+                                                <div className="absolute right-3 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+                                                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                                </div>
+                                            </div>
                                         </div>
-
                                         <button 
                                             onClick={() => handleStartReplay()}
                                             className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.02]"
                                         >
                                             START SESSION
                                         </button>
-
-                                        <div className="pt-4 border-t border-[#2a2e39]">
-                                             <div className="text-xs text-gray-500 text-center mb-2">OR PRACTICE SPECIFIC SETUPS</div>
-                                             <div className="grid grid-cols-2 gap-2">
-                                                 <button onClick={() => setAlert({msg: "Feature coming soon!", type: "info"})} className="bg-[#0b0e11] hover:bg-gray-800 text-gray-400 py-2 rounded border border-[#2a2e39] text-xs font-bold">ORDER BLOCKS</button>
-                                                 <button onClick={() => setAlert({msg: "Feature coming soon!", type: "info"})} className="bg-[#0b0e11] hover:bg-gray-800 text-gray-400 py-2 rounded border border-[#2a2e39] text-xs font-bold">FVG ENTRIES</button>
-                                             </div>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )
                     ) : (
-                        /* CHART VIEW (Live) */
                         <>
-                            {/* Ticker Tape */}
                             <div className="h-6 bg-[#0b0e11] border-b border-[#2a2e39] flex items-center overflow-hidden whitespace-nowrap px-2 z-10 shrink-0">
                                 <div className="text-[10px] font-bold text-gray-500 mr-2">LIVE:</div>
                                 <div className="animate-marquee flex gap-8">
                                     {entries.slice(-5).reverse().map((e, i) => ( 
                                         <span key={i} className={`text-[10px] font-mono ${e.score >= 7 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                                            {e.type} {asset} @ {e.price.toFixed(2)} [Score:{e.score}]
+                                            {e.type} {asset} @ {e.price.toFixed(2)} [{e.setupName}]
                                         </span> 
                                     ))}
                                 </div>
@@ -415,19 +488,18 @@ const App: React.FC = () => {
                                         setupVisibility={setupVisibility}
                                         setSetupVisibility={setSetupVisibility}
                                         focusedEntry={focusedEntry}
-                                        // Replay is disabled in Live View
                                         replayState={{ active: false, index: 0, playing: false, speed: 0, maxIndex: 0 }}
                                         onReplayControl={handleReplayControls}
                                     />
                                 </ErrorBoundary>
                                 
-                                {/* Hover Tooltip */}
                                 {hoveredEntry && !clickedEntry && (
                                     <div className="absolute top-4 left-16 bg-[#151924] border border-blue-500/50 p-3 rounded shadow-xl text-xs z-50 pointer-events-none">
                                         <div className="font-bold text-white mb-1 flex items-center gap-2">
                                             <span className={hoveredEntry.type === 'LONG' ? 'text-green-500' : 'text-red-500'}>{hoveredEntry.type}</span>
                                             <span className="bg-gray-700 px-1 rounded text-[10px]">{hoveredEntry.setupGrade}</span>
                                         </div>
+                                        <div className="text-gray-300 font-bold mb-1">{hoveredEntry.setupName}</div>
                                         <div className="text-gray-400 mb-1">Win Prob: <span className="text-white">{hoveredEntry.winProbability}%</span></div>
                                         <div className="text-gray-500 italic">{hoveredEntry.confluences[0]}</div>
                                     </div>
@@ -437,7 +509,7 @@ const App: React.FC = () => {
                     )}
                 </main>
 
-                {/* RIGHT SIDEBAR (Tools) - Only visible when not in Dashboard/Backtest/Chart/Stats mode */}
+                {/* RIGHT SIDEBAR (Tools) */}
                 {isSidebarPanelOpen && (
                     <aside className="hidden md:flex w-[320px] bg-[#151924] border-l border-[#2a2e39] flex-col z-30 shadow-xl">
                         <Panels 
@@ -456,13 +528,15 @@ const App: React.FC = () => {
                             focusedEntry={focusedEntry}
                             // @ts-ignore
                             onReplay={handleStartReplay}
+                            // @ts-ignore
+                            onViewOnChart={handleViewOnChart}
                         />
                     </aside>
                 )}
             </div>
-
-            {/* MOBILE BOTTOM NAVIGATION */}
-            <nav className="md:hidden h-16 bg-[#151924] border-t border-[#2a2e39] flex items-center justify-around shrink-0 z-50 pb-safe">
+            
+            {/* MOBILE NAVIGATION ... (omitted for brevity, unchanged) ... */}
+             <nav className="md:hidden h-16 bg-[#151924] border-t border-[#2a2e39] flex items-center justify-around shrink-0 z-50 pb-safe">
                  <button onClick={() => setActiveTab('DASHBOARD')} className={`flex flex-col items-center gap-1 ${activeTab === 'DASHBOARD' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <DashboardIcon /> <span className="text-[10px]">Home</span>
                 </button>
@@ -472,40 +546,13 @@ const App: React.FC = () => {
                 <button onClick={() => setActiveTab('BACKTEST')} className={`flex flex-col items-center gap-1 ${activeTab === 'BACKTEST' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <BacktestIcon /> <span className="text-[10px]">Replay</span>
                 </button>
-                <button onClick={() => setActiveTab('SCANNER')} className={`flex flex-col items-center gap-1 ${activeTab === 'SCANNER' ? 'text-blue-500' : 'text-gray-500'}`}>
-                    <ListIcon /> <span className="text-[10px]">Scanner</span>
+                <button onClick={() => setActiveTab('SETUPS')} className={`flex flex-col items-center gap-1 ${activeTab === 'SETUPS' ? 'text-blue-500' : 'text-gray-500'}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> <span className="text-[10px]">Models</span>
                 </button>
                 <button onClick={() => setActiveTab('TRADING')} className={`flex flex-col items-center gap-1 ${activeTab === 'TRADING' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <TradeIcon /> <span className="text-[10px]">Trade</span>
                 </button>
             </nav>
-
-            {/* MOBILE PANEL DRAWER (Scanner/Trading overlay on mobile) */}
-            <div className={`md:hidden fixed inset-0 z-50 bg-[#0b0e11] transform transition-transform duration-300 flex flex-col ${isSidebarPanelOpen ? 'translate-y-0' : 'translate-y-full'}`}>
-                 <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-[#151924]">
-                    <h2 className="font-bold text-lg text-white">{activeTab}</h2>
-                    <button onClick={() => setActiveTab('CHART')} className="text-gray-400 p-2">✕ Close</button>
-                 </div>
-                 <div className="flex-1 overflow-y-auto">
-                    <Panels 
-                        activeTab={activeTab} setActiveTab={setActiveTab}
-                        structure={structure} entries={entries} setClickedEntry={setClickedEntry}
-                        balance={balance} position={position} data={data} closeTrade={closeTrade}
-                        enterTrade={enterTrade} slInput={slInput} setSlInput={setSlInput}
-                        tpInput={tpInput} setTpInput={setTpInput} autoTrade={autoTrade} setAutoTrade={setAutoTrade}
-                        settingsTab={settingsTab} setSettingsTab={setSettingsTab}
-                        config={config} setConfig={setConfig} overlays={overlays} setOverlays={setOverlays}
-                        colors={colors} setColors={setColors} backtestStats={backtestStats}
-                        recentHistory={recentHistory} obs={obs}
-                        simulation={simulation} setSimulation={setSimulation}
-                        onDeepScan={handleDeepScan} isScanning={isScanning}
-                        onFocusEntry={handleFocusEntry}
-                        focusedEntry={focusedEntry}
-                        // @ts-ignore
-                        onReplay={handleStartReplay}
-                    />
-                 </div>
-            </div>
         </div>
     );
 };

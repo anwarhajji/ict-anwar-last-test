@@ -1,5 +1,5 @@
 
-import { CandleData, EntrySignal, FVG, OrderBlock, SessionType, StructurePoint } from '../types';
+import { CandleData, EntrySignal, FVG, OrderBlock, SessionType, StructurePoint, ICTSetupType } from '../types';
 
 // --- UTILS ---
 export const getSession = (hour: number): SessionType => {
@@ -18,6 +18,11 @@ export const determinePO3 = (candle: CandleData, session: SessionType): 'ACCUMUL
         return 'MANIPULATION';
     }
     return 'NONE';
+};
+
+const getFibLevel = (price: number, low: number, high: number): number => {
+    if (high === low) return 0.5;
+    return (price - low) / (high - low);
 };
 
 // --- ALGORITHMS ---
@@ -77,7 +82,8 @@ export const detectFVG = (data: CandleData[]): FVG[] => {
         const c2 = data[i - 1];
         const c3 = data[i];
         const hour = new Date((c2.time as number) * 1000).getUTCHours();
-        const isSilverBullet = (hour === 14 || hour === 9 || hour === 3);
+        // Silver Bullet Windows (UTC): 3-4 (London), 10-11 (NY AM), 14-15 (NY PM)
+        const isSilverBullet = (hour === 3 || hour === 10 || hour === 14);
 
         if (c1.high < c3.low) {
             fvgs.push({ id: `fvg-bull-${c2.time}`, time: c2.time, priceHigh: c3.low, priceLow: c1.high, direction: 'Bullish', mitigated: false, isSilverBullet });
@@ -136,94 +142,182 @@ export const detectOrderBlocks = (data: CandleData[], thresholdMult: number): Or
     return obs.filter(o => !o.mitigated).slice(-10);
 };
 
-export const detectEntries = (data: CandleData[], obs: OrderBlock[], fvgs: FVG[], timeframe: string): EntrySignal[] => {
+export const detectEntries = (
+    data: CandleData[], 
+    obs: OrderBlock[], 
+    fvgs: FVG[], 
+    structure: StructurePoint[],
+    timeframe: string,
+    htfBias: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral'
+): EntrySignal[] => {
     const signals: EntrySignal[] = [];
     let lastSignalTime = 0;
-    const COOLDOWN = 10 * 60; 
+    const COOLDOWN = 15 * 60; // 15 mins cooldown
     const isScalping = ['1m', '3m', '5m'].includes(timeframe);
+
+    // Filter structure for recent Swing Points
+    const recentHighs = structure.filter(s => ['HH', 'LH', 'PH'].includes(s.type));
+    const recentLows = structure.filter(s => ['LL', 'HL', 'PL'].includes(s.type));
 
     for (let i = 100; i < data.length; i++) {
         const candle = data[i];
-        const prev50 = data.slice(i-50, i);
-        const avg = prev50.reduce((a,b) => a + b.close, 0) / 50;
-        const isBullish = candle.close > avg;
         
+        // 1. DETERMINE DEALING RANGE (Last 50 candles approx) & FIBONACCI
+        const rangeLookback = 50;
+        const rangeData = data.slice(i - rangeLookback, i);
+        const rangeHigh = Math.max(...rangeData.map(c => c.high));
+        const rangeLow = Math.min(...rangeData.map(c => c.low));
+        const fibLevel = getFibLevel(candle.close, rangeLow, rangeHigh);
+        
+        // Discount < 0.5 (Buy Zone), Premium > 0.5 (Sell Zone)
+        const inDiscount = fibLevel < 0.5;
+        const inPremium = fibLevel > 0.5;
+        const inOTE = (fibLevel >= 0.62 && fibLevel <= 0.79) || (fibLevel <= 0.38 && fibLevel >= 0.21); // OTE Zones
+
         let score = 0;
         const confluences: string[] = [];
         let confluenceLevel: number | undefined = undefined;
+        let setupName: ICTSetupType = 'Standard FVG';
+        let direction: 'LONG' | 'SHORT' | null = null;
 
-        const touchingBullOB = obs.find(ob => ob.direction === 'Bullish' && !ob.mitigated && candle.low <= ob.priceHigh && candle.low >= ob.priceLow && (ob.time as number) < (candle.time as number));
-        if (touchingBullOB) { 
-            score += 3; 
-            confluences.push(`Retest Bullish ${touchingBullOB.subtype === 'Breaker' ? 'Breaker' : 'OB'}`); 
-            confluenceLevel = touchingBullOB.priceHigh;
-        }
-        
-        const touchingBearOB = obs.find(ob => ob.direction === 'Bearish' && !ob.mitigated && candle.high >= ob.priceLow && candle.high <= ob.priceHigh && (ob.time as number) < (candle.time as number));
-        if (touchingBearOB) { 
-            score += 3; 
-            confluences.push(`Retest Bearish ${touchingBearOB.subtype === 'Breaker' ? 'Breaker' : 'OB'}`); 
-            confluenceLevel = touchingBearOB.priceLow;
-        }
-        
-        const touchingBullFVG = fvgs.find(f => f.direction === 'Bullish' && candle.low <= f.priceHigh && candle.low >= f.priceLow && (f.time as number) < (candle.time as number));
-        if (touchingBullFVG) { 
-            score += 2; 
-            confluences.push('Discount FVG'); 
-            if (!confluenceLevel) confluenceLevel = touchingBullFVG.priceHigh;
-            if (touchingBullFVG.isSilverBullet) { score += 4; confluences.push('Silver Bullet Zone'); } 
-        }
-        
-        const touchingBearFVG = fvgs.find(f => f.direction === 'Bearish' && candle.high >= f.priceLow && candle.high <= f.priceHigh && (f.time as number) < (candle.time as number));
-        if (touchingBearFVG) { 
-            score += 2; 
-            confluences.push('Premium FVG'); 
-            if (!confluenceLevel) confluenceLevel = touchingBearFVG.priceLow;
-            if (touchingBearFVG.isSilverBullet) { score += 4; confluences.push('Silver Bullet Zone'); } 
-        }
-        
+        // --- CONTEXT CHECKS ---
         const hour = new Date((candle.time as number) * 1000).getUTCHours();
         const session = getSession(hour);
-        if (session !== 'NONE') score += 1;
-        const po3 = determinePO3(candle, session);
+        const isSBTime = (hour === 3 || hour === 10 || hour === 14); // Silver Bullet Hours
 
-        if (score >= 4 && ((candle.time as number) - lastSignalTime > COOLDOWN)) {
-            const setupGrade = score >= 8 ? 'A++' : score >= 6 ? 'A+' : 'B';
-            const setupName = confluences.length > 0 ? confluences[0] : 'Standard Entry';
+        // 2. IDENTIFY POI INTERACTIONS
+        const touchingBullOB = obs.find(ob => ob.direction === 'Bullish' && !ob.mitigated && candle.low <= ob.priceHigh && candle.low >= ob.priceLow && (ob.time as number) < (candle.time as number));
+        const touchingBearOB = obs.find(ob => ob.direction === 'Bearish' && !ob.mitigated && candle.high >= ob.priceLow && candle.high <= ob.priceHigh && (ob.time as number) < (candle.time as number));
+        
+        const touchingBullFVG = fvgs.find(f => f.direction === 'Bullish' && candle.low <= f.priceHigh && candle.low >= f.priceLow && (f.time as number) < (candle.time as number));
+        const touchingBearFVG = fvgs.find(f => f.direction === 'Bearish' && candle.high >= f.priceLow && candle.high <= f.priceHigh && (f.time as number) < (candle.time as number));
 
-            if (isBullish && (touchingBullOB || touchingBullFVG)) {
-                 const swingLow = Math.min(...data.slice(i-5, i+1).map(c => c.low));
-                 const sl = Math.min(swingLow, touchingBullOB?.priceLow || swingLow) - (candle.close * 0.0005);
-                 const risk = candle.close - sl;
-                 const tp = candle.close + (risk * 2); 
-                 signals.push({
-                    time: candle.time, type: 'LONG', price: candle.close, score, confluences, sl, tp,
-                    winProbability: Math.min(95, score * 10 + 30),
-                    tradingStyle: isScalping ? 'SCALP' : 'DAY_TRADE',
-                    po3Phase: po3,
-                    setupName,
-                    setupGrade,
-                    confluenceLevel,
-                    timeframe
-                 });
-                 lastSignalTime = candle.time as number;
-            } else if (!isBullish && (touchingBearOB || touchingBearFVG)) {
-                 const swingHigh = Math.max(...data.slice(i-5, i+1).map(c => c.high));
-                 const sl = Math.max(swingHigh, touchingBearOB?.priceHigh || swingHigh) + (candle.close * 0.0005);
-                 const risk = sl - candle.close;
-                 const tp = candle.close - (risk * 2);
-                 signals.push({
-                    time: candle.time, type: 'SHORT', price: candle.close, score, confluences, sl, tp,
-                    winProbability: Math.min(95, score * 10 + 30),
-                    tradingStyle: isScalping ? 'SCALP' : 'DAY_TRADE',
-                    po3Phase: po3,
-                    setupName,
-                    setupGrade,
-                    confluenceLevel,
-                    timeframe
-                 });
-                 lastSignalTime = candle.time as number;
+        // 3. LOGIC FOR LONG
+        if (inDiscount && (touchingBullOB || touchingBullFVG)) {
+            direction = 'LONG';
+            score += 2; // Base for POI
+            if (htfBias === 'Bullish') score += 2;
+            if (session !== 'NONE') score += 1;
+            
+            // Check for Liquidity Sweep (Turtle Soup / 2022 Model)
+            // Did price dip below a recent low recently?
+            const recentSweep = rangeData.slice(-20).some(c => {
+                const prevLow = recentLows.find(l => (l.time as number) < (c.time as number) && (l.time as number) > (c.time as number) - 10000);
+                return prevLow && c.low < prevLow.price;
+            });
+            
+            if (recentSweep) {
+                setupName = '2022 Model';
+                score += 3;
+                confluences.push('SSL Swept');
             }
+
+            if (touchingBullOB?.subtype === 'Breaker') {
+                setupName = 'Unicorn'; // Breaker + FVG typically implies unicorn if FVG present
+                score += 3;
+                confluences.push('Breaker Block');
+            }
+
+            if (isSBTime && touchingBullFVG?.isSilverBullet) {
+                setupName = 'Silver Bullet';
+                score += 4;
+            }
+
+            if (inOTE) {
+                confluences.push('OTE Fib');
+                score += 1;
+                if(setupName === 'Standard FVG') setupName = 'OTE';
+            }
+
+            if (touchingBullFVG) {
+                confluences.push('Discount FVG');
+                confluenceLevel = touchingBullFVG.priceHigh;
+            }
+            if (touchingBullOB) {
+                confluences.push('Bullish OB');
+                if(!confluenceLevel) confluenceLevel = touchingBullOB.priceHigh;
+            }
+        }
+
+        // 4. LOGIC FOR SHORT
+        else if (inPremium && (touchingBearOB || touchingBearFVG)) {
+            direction = 'SHORT';
+            score += 2;
+            if (htfBias === 'Bearish') score += 2;
+            if (session !== 'NONE') score += 1;
+
+            // Liquidity Sweep Check
+            const recentSweep = rangeData.slice(-20).some(c => {
+                const prevHigh = recentHighs.find(h => (h.time as number) < (c.time as number) && (h.time as number) > (c.time as number) - 10000);
+                return prevHigh && c.high > prevHigh.price;
+            });
+
+            if (recentSweep) {
+                setupName = '2022 Model';
+                score += 3;
+                confluences.push('BSL Swept');
+            }
+
+            if (touchingBearOB?.subtype === 'Breaker') {
+                setupName = 'Unicorn';
+                score += 3;
+                confluences.push('Breaker Block');
+            }
+
+            if (isSBTime && touchingBearFVG?.isSilverBullet) {
+                setupName = 'Silver Bullet';
+                score += 4;
+            }
+
+            if (inOTE) {
+                confluences.push('OTE Fib');
+                score += 1;
+                if(setupName === 'Standard FVG') setupName = 'OTE';
+            }
+
+            if (touchingBearFVG) {
+                confluences.push('Premium FVG');
+                confluenceLevel = touchingBearFVG.priceLow;
+            }
+            if (touchingBearOB) {
+                confluences.push('Bearish OB');
+                if(!confluenceLevel) confluenceLevel = touchingBearOB.priceLow;
+            }
+        }
+
+        // 5. GENERATE SIGNAL
+        if (direction && score >= 4 && ((candle.time as number) - lastSignalTime > COOLDOWN)) {
+             const setupGrade = score >= 8 ? 'A++' : score >= 6 ? 'A+' : 'B';
+             const isLong = direction === 'LONG';
+             
+             // Dynamic SL/TP based on Structure
+             const swingLow = Math.min(...data.slice(i-5, i+1).map(c => c.low));
+             const swingHigh = Math.max(...data.slice(i-5, i+1).map(c => c.high));
+
+             let sl = isLong ? Math.min(swingLow, touchingBullOB?.priceLow || swingLow) : Math.max(swingHigh, touchingBearOB?.priceHigh || swingHigh);
+             // Add buffer
+             sl = isLong ? sl - (candle.close * 0.0005) : sl + (candle.close * 0.0005);
+             
+             const risk = Math.abs(candle.close - sl);
+             const tp = isLong ? candle.close + (risk * 2) : candle.close - (risk * 2);
+
+             signals.push({
+                time: candle.time, 
+                type: direction, 
+                price: candle.close, 
+                score, 
+                confluences, 
+                sl, 
+                tp,
+                winProbability: Math.min(98, score * 10 + 20),
+                tradingStyle: isScalping ? 'SCALP' : 'DAY_TRADE',
+                po3Phase: determinePO3(candle, session),
+                setupName,
+                setupGrade,
+                confluenceLevel,
+                timeframe
+             });
+             lastSignalTime = candle.time as number;
         }
     }
     return signals;
