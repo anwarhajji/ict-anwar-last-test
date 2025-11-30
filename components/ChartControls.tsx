@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { OverlayState, EntrySignal } from '../types';
+import { OverlayState, EntrySignal, ICTSetupType } from '../types';
+import { MODEL_INFO } from './panels/SetupsPanel';
 
 interface ChartControlsProps {
     overlays: OverlayState;
@@ -24,6 +25,38 @@ const ToggleOption = ({ label, active, onClick }: { label: string, active: boole
     </div>
 );
 
+const SetupToggleRow = ({ label, active, onToggle, description }: { label: string, active: boolean, onToggle: () => void, description?: string }) => {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div className="flex flex-col border-b border-gray-800 last:border-0">
+             <div 
+                className="flex items-center justify-between px-4 py-2 hover:bg-gray-800 cursor-pointer transition-colors select-none"
+                onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            >
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+                        className={`p-1 rounded hover:bg-gray-700 transition-colors ${expanded ? 'text-blue-400' : 'text-gray-500'}`}
+                        title="Click for Explication"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    </button>
+                    <span className="text-sm text-gray-300">{label}</span>
+                </div>
+                <div className={`relative w-8 h-4 rounded-full transition-colors ${active ? 'bg-blue-600' : 'bg-gray-600'}`}>
+                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${active ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                </div>
+            </div>
+            {expanded && description && (
+                <div className="px-4 py-2 bg-[#151924] text-xs text-gray-400 italic border-l-2 border-blue-500 mx-4 mb-2 animate-in slide-in-from-top-1">
+                    {description}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const DraggableFocusPanel = ({ 
     entry, 
     onClose, 
@@ -36,6 +69,7 @@ const DraggableFocusPanel = ({
     const [position, setPosition] = useState<{ x: number, y: number } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [showInfo, setShowInfo] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -79,6 +113,8 @@ const DraggableFocusPanel = ({
 
     if (!position) return null;
 
+    const info = MODEL_INFO[entry.setupName] || { desc: "Custom Setup" };
+
     return (
         <div 
             ref={panelRef}
@@ -90,7 +126,12 @@ const DraggableFocusPanel = ({
                 onMouseDown={handleMouseDown}
                 title="Drag to move"
             >
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Focus Mode</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Focus Mode</span>
+                    <button onClick={() => setShowInfo(!showInfo)} className="text-blue-400 hover:text-white" title="Explication">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    </button>
+                </div>
                 <button 
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
                     className="text-gray-400 hover:text-white"
@@ -105,6 +146,12 @@ const DraggableFocusPanel = ({
                         <div className="text-xs text-gray-500 font-mono mt-0.5">@{entry.price.toFixed(2)}</div>
                     </div>
                 </div>
+
+                {showInfo && (
+                    <div className="mb-3 text-[10px] text-gray-400 bg-gray-800/50 p-2 rounded border border-gray-700 italic">
+                        {info.desc}
+                    </div>
+                )}
                 
                 <button 
                     onClick={onShowAll}
@@ -126,6 +173,8 @@ export const ChartControls: React.FC<ChartControlsProps> = ({
         if (activePopup === name) setActivePopup(null);
         else setActivePopup(name);
     };
+
+    const setupTypes: ICTSetupType[] = ['2022 Model', 'Silver Bullet', 'Unicorn', 'OTE', 'Breaker', 'Standard FVG'];
 
     return (
         <>
@@ -222,7 +271,24 @@ export const ChartControls: React.FC<ChartControlsProps> = ({
                                     onClick={() => setOverlays({...overlays, macro: !overlays.macro})} 
                                 />
 
-                                <div className="h-[1px] bg-gray-700 mx-4 my-2"></div>
+                                <div className="px-3 py-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-700 pb-2 mt-4">ICT Models</div>
+                                {setupTypes.map(type => (
+                                    <SetupToggleRow 
+                                        key={type}
+                                        label={type}
+                                        active={overlays.setupFilters[type]}
+                                        onToggle={() => setOverlays({
+                                            ...overlays,
+                                            setupFilters: {
+                                                ...overlays.setupFilters,
+                                                [type]: !overlays.setupFilters[type]
+                                            }
+                                        })}
+                                        description={MODEL_INFO[type]?.desc}
+                                    />
+                                ))}
+
+                                <div className="h-[1px] bg-gray-700 mx-4 my-2 mt-4"></div>
                                 
                                 <div className="px-4 py-1">
                                     <button 

@@ -131,7 +131,7 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                                 <div className="text-xs text-gray-500 uppercase font-bold group-hover:text-blue-400 transition-colors">Strategy Logic</div>
                             </div>
-                            <div className="text-white text-xs opacity-70 group-hover:opacity-100 italic">Hover to view analysis...</div>
+                            <div className="text-white text-xs opacity-70 group-hover:opacity-100 italic">Hover to view explication</div>
                             
                             {/* Hover Popup */}
                             <div className="absolute top-0 right-[105%] w-64 bg-[#151924] border border-blue-500/50 p-4 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 translate-x-4 group-hover:translate-x-0">
