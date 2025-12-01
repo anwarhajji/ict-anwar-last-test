@@ -5,6 +5,7 @@ export { UTCTimestamp };
 
 export type SessionType = 'ASIA' | 'LONDON' | 'NEW_YORK' | 'NONE';
 export type ICTSetupType = '2022 Model' | 'Silver Bullet' | 'Unicorn' | 'OTE' | 'Breaker' | 'Standard FVG';
+export type PO3Phase = 'ACCUMULATION' | 'MANIPULATION' | 'DISTRIBUTION' | 'EXPANSION' | 'REVERSAL' | 'NONE';
 
 export interface CandleData {
     time: UTCTimestamp;
@@ -78,7 +79,7 @@ export interface EntrySignal {
     tp: number;
     winProbability: number;
     tradingStyle: 'SCALP' | 'DAY_TRADE';
-    po3Phase: 'ACCUMULATION' | 'MANIPULATION' | 'DISTRIBUTION' | 'NONE';
+    po3Phase: PO3Phase;
     backtestResult?: 'WIN' | 'LOSS' | 'PENDING';
     backtestPnL?: number;
     lotSize?: number;
@@ -138,4 +139,35 @@ export interface ColorTheme {
 export interface SimulationConfig {
     minWinProbability: number;
     allowedGrades: Record<string, boolean>;
+}
+
+export interface BiasState {
+    direction: 'Bullish' | 'Bearish' | 'Neutral';
+    structure: 'Bullish' | 'Bearish' | 'Neutral';
+    openPrice: number;
+    currentPrice: number;
+    explanation?: string;
+}
+
+export interface SessionBias {
+    direction: 'Bullish' | 'Bearish' | 'Neutral';
+    high: number;
+    low: number;
+    status: 'PENDING' | 'ACTIVE' | 'FINISHED';
+    po3Phase: PO3Phase;
+    explanation: string;
+    prediction: string;
+}
+
+export interface BiasMatrix {
+    monthly: BiasState;
+    weekly: BiasState;
+    daily: BiasState;
+    session: SessionType;
+    po3State: PO3Phase;
+    sessionBiases: {
+        ASIA: SessionBias;
+        LONDON: SessionBias;
+        NEW_YORK: SessionBias;
+    };
 }

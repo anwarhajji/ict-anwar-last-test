@@ -15,7 +15,11 @@ export const fetchCandles = async (asset: string, timeframe: string, limit: numb
 
     const res = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=${limit}`);
     const raw = await res.json();
-    if (!Array.isArray(raw)) throw new Error("Invalid API Data");
+    if (!Array.isArray(raw)) {
+        // Fallback or empty return if API fails (e.g., rate limit)
+        console.warn(`API Error for ${symbol} ${timeframe}`);
+        return [];
+    }
     
     return raw.map((c: any) => ({ 
         time: c[0] / 1000 as UTCTimestamp, 

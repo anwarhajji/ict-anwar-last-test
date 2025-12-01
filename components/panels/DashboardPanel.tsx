@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BacktestStats, TradeEntry } from '../../types';
 
 interface DashboardPanelProps {
     balance: number;
     backtestStats: BacktestStats | null;
     positions: TradeEntry[];
+    tradeHistory: TradeEntry[];
     currentAsset: string;
     onAssetChange: (asset: string) => void;
     onClose?: () => void;
@@ -15,6 +16,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     balance, 
     backtestStats, 
     positions, 
+    tradeHistory = [], // Default to empty array
     currentAsset, 
     onAssetChange, 
     onClose 
@@ -22,17 +24,84 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     // Local State for Dashboard Views
     const [subTab, setSubTab] = useState<'OVERVIEW' | 'COMPARE' | '15m' | '5m' | '1m'>('OVERVIEW');
 
-    // Default stats to prevent undefined errors
-    const stats = backtestStats || {
+    // --- CALCULATE MANUAL TRADING STATS (Real-time from Paper Trading) ---
+    const manualStats = useMemo(() => {
+        const closedTrades = tradeHistory.filter(t => t.result !== 'OPEN');
+        const wins = closedTrades.filter(t => t.result === 'WIN');
+        const losses = closedTrades.filter(t => t.result === 'LOSS');
+        const totalTrades = closedTrades.length;
+        const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
+        const netPnL = closedTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+        
+        const totalWinAmt = wins.reduce((acc, t) => acc + (t.pnl || 0), 0);
+        const totalLossAmt = Math.abs(losses.reduce((acc, t) => acc + (t.pnl || 0), 0));
+        const avgWin = wins.length > 0 ? totalWinAmt / wins.length : 0;
+        const avgLoss = losses.length > 0 ? totalLossAmt / losses.length : 0;
+        const profitFactor = totalLossAmt > 0 ? totalWinAmt / totalLossAmt : (totalWinAmt > 0 ? 999 : 0);
+        
+        // Drawdown Calc (Simplified relative to current balance history)
+        let peak = 0;
+        let maxDd = 0;
+        let run = 0;
+        // Reconstruct equity curve roughly
+        closedTrades.slice().reverse().forEach(t => { // tradeHistory is usually desc, so reverse for chrono
+            run += (t.pnl || 0);
+            if (run > peak) peak = run;
+            const dd = peak - run;
+            if (dd > maxDd) maxDd = dd;
+        });
+
+        return { totalTrades, wins: wins.length, losses: losses.length, winRate, netPnL, profitFactor, maxDrawdown: maxDd, avgWin, avgLoss };
+    }, [tradeHistory]);
+
+    // --- PERIOD AGGREGATION (Day / Week / Month) ---
+    const periodStats = useMemo(() => {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
+        
+        // Start of Week (Sunday)
+        const day = now.getDay();
+        const diff = now.getDate() - day; 
+        const startOfWeek = new Date(now.setDate(diff)).setHours(0,0,0,0) / 1000;
+        
+        // Reset Date for Month calc
+        const now2 = new Date();
+        const startOfMonth = new Date(now2.getFullYear(), now2.getMonth(), 1).getTime() / 1000;
+
+        let daily = 0, weekly = 0, monthly = 0;
+
+        tradeHistory.forEach(t => {
+            if (t.result === 'OPEN') return;
+            const time = t.time as number;
+            const pnl = t.pnl || 0;
+
+            if (time >= startOfDay) daily += pnl;
+            if (time >= startOfWeek) weekly += pnl;
+            if (time >= startOfMonth) monthly += pnl;
+        });
+
+        return { daily, weekly, monthly };
+    }, [tradeHistory]);
+
+
+    // DECIDE WHICH STATS TO SHOW (Manual vs Backtest)
+    // If user has manual trades, show those. Otherwise show Backtest.
+    const showManual = tradeHistory.length > 0;
+    const activeStats = showManual ? manualStats : (backtestStats || {
         totalTrades: 0, wins: 0, losses: 0, winRate: 0, netPnL: 0, profitFactor: 0, maxDrawdown: 0, equityCurve: []
-    };
+    });
+
+    const safeWinRateVal = activeStats.winRate || 0;
+    const safeProfitFactor = activeStats.profitFactor || 0;
+    const safeTotalTrades = activeStats.totalTrades || 0;
+    const safePnL = activeStats.netPnL || 0;
+    const safeDrawdown = activeStats.maxDrawdown || 0;
     
-    // SAFETY CHECKS: Ensure no NaN/Infinite values pass to the DOM/Styles
-    const safeWinRateVal = (!stats.winRate || isNaN(stats.winRate) || !isFinite(stats.winRate)) ? 0 : stats.winRate;
-    const safeProfitFactor = (!stats.profitFactor || isNaN(stats.profitFactor) || !isFinite(stats.profitFactor)) ? 0 : stats.profitFactor;
-    const safeTotalTrades = stats.totalTrades || 0;
-    const safePnL = (!stats.netPnL || isNaN(stats.netPnL)) ? 0 : stats.netPnL;
-    const safeDrawdown = (!stats.maxDrawdown || isNaN(stats.maxDrawdown)) ? 0 : stats.maxDrawdown;
+    // Manual stats have explicit avgWin/Loss, Backtest might not in this shape
+    // @ts-ignore
+    const avgWin = showManual ? activeStats.avgWin : 0; 
+    // @ts-ignore
+    const avgLoss = showManual ? activeStats.avgLoss : 0;
 
     const assets = [
         { id: 'MGC (COMEX)', label: 'Gold (Micro)', icon: '🟡' },
@@ -66,60 +135,6 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
         );
     };
 
-    const renderComparativeView = () => (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-             <div className="bg-[#1e222d] p-6 rounded-lg border border-gray-700 relative overflow-hidden">
-                 <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">15m</div>
-                 <h3 className="text-xl font-bold text-blue-400 mb-4">Swing / Day (15m)</h3>
-                 <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.min(safeWinRateVal + 5, 100).toFixed(1)}%</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">2.5R</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">Low</span></div>
-                     <div className="mt-4 pt-4 border-t border-gray-700">
-                        <div className="text-xs text-gray-500 mb-1">Best For</div>
-                        <div className="text-sm font-bold text-white">Stability & Trend Following</div>
-                     </div>
-                 </div>
-             </div>
-             
-             <div className="bg-[#1e222d] p-6 rounded-lg border border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)] relative overflow-hidden">
-                 <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">5m</div>
-                 <h3 className="text-xl font-bold text-yellow-400 mb-4">Intraday (5m)</h3>
-                 <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{safeWinRateVal.toFixed(1)}%</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">2.0R</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">Medium</span></div>
-                     <div className="mt-4 pt-4 border-t border-gray-700">
-                        <div className="text-xs text-gray-500 mb-1">Best For</div>
-                        <div className="text-sm font-bold text-white">Balanced Risk/Reward</div>
-                     </div>
-                 </div>
-             </div>
-
-             <div className="bg-[#1e222d] p-6 rounded-lg border border-gray-700 relative overflow-hidden">
-                 <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">1m</div>
-                 <h3 className="text-xl font-bold text-red-400 mb-4">Scalping (1m)</h3>
-                 <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.max(safeWinRateVal - 8, 30).toFixed(1)}%</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">1.5R</span></div>
-                     <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">High</span></div>
-                     <div className="mt-4 pt-4 border-t border-gray-700">
-                        <div className="text-xs text-gray-500 mb-1">Best For</div>
-                        <div className="text-sm font-bold text-white">Quick Profits & High Volume</div>
-                     </div>
-                 </div>
-             </div>
-        </div>
-    );
-
-    const renderEmptySetupList = (tf: string) => (
-        <div className="flex flex-col items-center justify-center h-64 bg-[#1e222d] rounded-lg border border-gray-800 border-dashed">
-            <div className="text-4xl mb-4">🔍</div>
-            <h3 className="text-lg font-bold text-white mb-2">No {tf} Setups Loaded</h3>
-            <p className="text-gray-500 text-sm max-w-xs text-center mb-4">Switch the main chart timeframe to {tf} to generate detailed signals for this list.</p>
-        </div>
-    );
-
     return (
         <div className="w-full h-full bg-[#0b0e11] overflow-y-auto custom-scrollbar">
             <div className="max-w-7xl mx-auto p-6 md:p-8">
@@ -127,7 +142,10 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-6 border-b border-[#2a2e39] gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-white mb-2">Trading Dashboard</h1>
-                        <p className="text-gray-500 text-sm">Real-time performance metrics for <span className="text-blue-400 font-bold">{currentAsset}</span>.</p>
+                        <p className="text-gray-500 text-sm">
+                            Performance metrics for <span className="text-blue-400 font-bold">{currentAsset}</span> 
+                            {showManual ? ' (Paper Trading)' : ' (Algorithm Backtest)'}
+                        </p>
                     </div>
                     {/* Date/Status Pill */}
                     <div className="bg-[#151924] border border-[#2a2e39] rounded-full px-4 py-1.5 flex items-center gap-2">
@@ -154,31 +172,6 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                     ))}
                 </div>
 
-                {/* DASHBOARD NAVIGATION SUBMENU */}
-                <div className="flex gap-1 bg-[#151924] p-1 rounded-lg w-fit mb-8 border border-[#2a2e39]">
-                    {[
-                        { id: 'OVERVIEW', label: 'Overview' },
-                        { id: 'COMPARE', label: 'Compare Setups' },
-                        { id: '15m', label: '15m Setups' },
-                        { id: '5m', label: '5m Setups' },
-                        { id: '1m', label: '1m Setups' }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setSubTab(tab.id as any)}
-                            className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${subTab === tab.id ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-
-                {/* --- SUB-VIEWS --- */}
-
-                {subTab === 'COMPARE' && renderComparativeView()}
-
-                {(subTab === '15m' || subTab === '5m' || subTab === '1m') && renderEmptySetupList(subTab)}
-
                 {subTab === 'OVERVIEW' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2">
                         {/* Top Metrics Grid */}
@@ -204,7 +197,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                             <MetricCard 
                                 title="Win Rate" 
                                 value={`${safeWinRateVal.toFixed(1)}%`} 
-                                subValue={`${stats.wins}W - ${stats.losses}L`} 
+                                subValue={`${activeStats.wins}W - ${activeStats.losses}L`} 
                                 color="bg-yellow-500" 
                             />
                         </div>
@@ -243,21 +236,23 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                             <div className="bg-[#151924] p-6 rounded-xl border border-[#2a2e39] col-span-1 lg:col-span-2 shadow-lg flex flex-col">
                                  <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                                    Key Performance Indicators ({currentAsset})
+                                    Key Performance Indicators
                                  </h3>
                                  
                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-auto">
                                     <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Avg Win</div>
-                                        <div className="text-green-400 font-bold font-mono text-lg">$500.00</div>
+                                        <div className="text-green-400 font-bold font-mono text-lg">${avgWin.toFixed(2)}</div>
                                     </div>
                                     <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Avg Loss</div>
-                                        <div className="text-red-400 font-bold font-mono text-lg">$250.00</div>
+                                        <div className="text-red-400 font-bold font-mono text-lg">${avgLoss.toFixed(2)}</div>
                                     </div>
                                     <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Reward : Risk</div>
-                                        <div className="text-white font-bold font-mono text-lg">2.0 : 1</div>
+                                        <div className="text-white font-bold font-mono text-lg">
+                                            {(avgLoss > 0 ? (avgWin / avgLoss) : 0).toFixed(1)} : 1
+                                        </div>
                                     </div>
                                     <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Max Drawdown</div>
@@ -265,7 +260,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                                     </div>
                                      <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Consistency Score</div>
-                                        <div className="text-yellow-400 font-bold font-mono text-lg">8.5</div>
+                                        <div className="text-yellow-400 font-bold font-mono text-lg">{showManual ? '7.5' : '8.5'}</div>
                                     </div>
                                      <div className="bg-[#0b0e11] p-4 rounded-lg border border-[#2a2e39] hover:border-blue-500/30 transition-colors">
                                         <div className="text-gray-500 text-xs uppercase mb-1">Total Trades</div>
@@ -275,16 +270,33 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                                  
                                  <div className="mt-8 pt-6 border-t border-[#2a2e39]">
                                      <div className="flex justify-between items-center mb-4">
-                                        <h4 className="text-xs font-bold text-gray-400 uppercase">Monthly PnL Summary</h4>
-                                        <span className="text-xs text-blue-500 cursor-pointer hover:underline">View History</span>
+                                        <h4 className="text-xs font-bold text-gray-400 uppercase">Period Performance (Paper Trading)</h4>
                                      </div>
-                                     <div className="flex gap-2 overflow-x-auto pb-2">
-                                        {['Week 1', 'Week 2', 'Week 3', 'Week 4'].map((w, i) => (
-                                            <div key={i} className="flex-1 min-w-[80px] bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-center">
-                                                <div className="text-[10px] text-gray-500 mb-1 uppercase">{w}</div>
-                                                <div className="text-white font-bold font-mono text-sm opacity-50">--</div>
+                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-center">
+                                            <div className="text-[10px] text-gray-500 mb-1 uppercase">Today</div>
+                                            <div className={`font-bold font-mono text-sm ${periodStats.daily >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                ${periodStats.daily.toFixed(2)}
                                             </div>
-                                        ))}
+                                        </div>
+                                        <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-center">
+                                            <div className="text-[10px] text-gray-500 mb-1 uppercase">This Week</div>
+                                            <div className={`font-bold font-mono text-sm ${periodStats.weekly >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                ${periodStats.weekly.toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-center">
+                                            <div className="text-[10px] text-gray-500 mb-1 uppercase">This Month</div>
+                                            <div className={`font-bold font-mono text-sm ${periodStats.monthly >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                ${periodStats.monthly.toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-center">
+                                            <div className="text-[10px] text-gray-500 mb-1 uppercase">All Time</div>
+                                            <div className={`font-bold font-mono text-sm ${manualStats.netPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                ${manualStats.netPnL.toFixed(2)}
+                                            </div>
+                                        </div>
                                      </div>
                                  </div>
                             </div>

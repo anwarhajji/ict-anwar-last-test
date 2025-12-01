@@ -200,7 +200,7 @@ export const ChartControls: React.FC<ChartControlsProps> = ({
                         </button>
 
                         {activePopup === 'LAYERS' && (
-                            <div className="absolute right-10 top-0 bg-[#1e222d] border border-[#2a2e39] rounded shadow-xl w-64 py-2 z-50 max-h-[80vh] overflow-y-auto custom-scrollbar">
+                            <div className="absolute right-10 top-0 bg-[#1e222d] border border-[#2a2e39] rounded shadow-xl w-64 py-2 z-[60] max-h-[80vh] overflow-y-auto custom-scrollbar">
                                 <div className="px-3 py-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-700 pb-2">Chart Overlays</div>
                                 
                                 <ToggleOption 

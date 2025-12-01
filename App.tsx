@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade } from './types';
+import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade, BiasMatrix, BiasState } from './types';
 import { fetchCandles, getHtf } from './services/api';
-import { detectStructure, detectOrderBlocks, detectFVG, detectEntries } from './services/ict';
+import { detectStructure, detectOrderBlocks, detectFVG, detectEntries, calculateBias, getSession } from './services/ict';
 import { performBacktest } from './services/backtest';
 import { ChartComponent } from './components/Chart';
 import { EntryDetailModal, TopSetupsModal, ToastNotification, ErrorBoundary } from './components/Modals';
@@ -10,6 +9,7 @@ import { Panels } from './components/Panels';
 import { DashboardPanel } from './components/panels/DashboardPanel';
 import { StatsPanel } from './components/panels/StatsPanel';
 import { SetupsPanel } from './components/panels/SetupsPanel';
+import { ScannerPanel } from './components/panels/ScannerPanel';
 
 // Icons
 const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
@@ -59,6 +59,9 @@ const App: React.FC = () => {
     const [pdRange, setPdRange] = useState<{high: number, low: number} | null>(null);
     const [backtestStats, setBacktestStats] = useState<BacktestStats | null>(null);
     
+    // BIAS & CONTEXT STATE
+    const [biasMatrix, setBiasMatrix] = useState<BiasMatrix | undefined>(undefined);
+
     // UI State
     const [activeTab, setActiveTab] = useState('DASHBOARD');
     const [settingsTab, setSettingsTab] = useState('VISIBILITY'); 
@@ -215,18 +218,45 @@ const App: React.FC = () => {
     // --- DATA FETCHING ---
     const fetchData = async () => {
         try {
+            // 1. MAIN DATA
             const candles = await fetchCandles(asset, timeframe);
+            
+            // 2. HTF DATA FOR CONTEXT (1D, 1W, 1M for Bias)
+            // Fetch these in parallel for performance
+            const [candles1M, candles1W, candles1D] = await Promise.all([
+                fetchCandles(asset, '1M', 50).catch(e => []),
+                fetchCandles(asset, '1w', 50).catch(e => []),
+                fetchCandles(asset, '1d', 100).catch(e => [])
+            ]);
+
+            // 3. CALCULATE BIAS
+            const monthlyBias = calculateBias(candles1M);
+            const weeklyBias = calculateBias(candles1W);
+            const dailyBias = calculateBias(candles1D);
+            const currentHour = new Date().getUTCHours();
+            const currentSession = getSession(currentHour);
+
+            const initialMatrix: BiasMatrix = {
+                monthly: monthlyBias,
+                weekly: weeklyBias,
+                daily: dailyBias,
+                session: currentSession,
+                po3State: 'NONE', 
+                sessionBiases: {
+                    ASIA: { direction: 'Neutral', high: 0, low: 0, status: 'PENDING', po3Phase: 'NONE', explanation: '', prediction: '' },
+                    LONDON: { direction: 'Neutral', high: 0, low: 0, status: 'PENDING', po3Phase: 'NONE', explanation: '', prediction: '' },
+                    NEW_YORK: { direction: 'Neutral', high: 0, low: 0, status: 'PENDING', po3Phase: 'NONE', explanation: '', prediction: '' }
+                }
+            };
+
+            // 4. CHART SETUP
             const htfTf = getHtf(timeframe);
             let candlesHtf: CandleData[] = [];
-            let htfBias: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
-
-            try { 
-                candlesHtf = await fetchCandles(asset, htfTf, 200); 
-                const htfStructure = detectStructure(candlesHtf, 5);
-                if (htfStructure.length > 0) {
-                    htfBias = htfStructure[htfStructure.length-1].direction;
-                }
-            } catch (e) { console.warn("HTF Data fetch failed"); }
+            // Use the already fetched Daily data if TF is 1H or 4H, else fetch the specific HTF
+            if (htfTf === '1d' && candles1D.length > 0) candlesHtf = candles1D;
+            else {
+                 try { candlesHtf = await fetchCandles(asset, htfTf, 200); } catch (e) {}
+            }
 
             setData(candles);
             
@@ -251,8 +281,13 @@ const App: React.FC = () => {
             }
             const fvgsForDetection = isLowTf ? _htfFvgs : _fvgs; 
 
-            // Detect Entries using new Logic with HTF Bias and Structure
-            const _rawEntries = detectEntries(candles, obsForDetection, fvgsForDetection, _structure, timeframe, htfBias);
+            // 5. DETECT ENTRIES WITH TOP DOWN ANALYSIS
+            // NOTE: detectEntries now returns { signals, matrix }
+            const detectionResult = detectEntries(candles, obsForDetection, fvgsForDetection, _structure, timeframe, initialMatrix);
+            const _rawEntries = detectionResult.signals;
+            const updatedMatrix = detectionResult.matrix;
+
+            setBiasMatrix(updatedMatrix);
             
             const _filteredEntries = _rawEntries.filter(e => {
                 const meetsProb = e.winProbability >= simulation.minWinProbability;
@@ -575,6 +610,7 @@ const App: React.FC = () => {
                                 balance={balance} 
                                 backtestStats={backtestStats} 
                                 positions={positions} 
+                                tradeHistory={tradeHistory}
                                 currentAsset={asset}
                                 onAssetChange={setAsset}
                             />
@@ -597,6 +633,22 @@ const App: React.FC = () => {
                                 onClose={() => setActiveTab('CHART')}
                                 onViewOnChart={handleViewOnChart}
                             />
+                        ) : activeTab === 'SCANNER' ? (
+                            <div className="h-full bg-[#151924]">
+                                <ScannerPanel 
+                                    structure={structure} 
+                                    entries={entries} 
+                                    setClickedEntry={setClickedEntry} 
+                                    onDeepScan={handleDeepScan} 
+                                    isScanning={isScanning} 
+                                    onClose={() => setActiveTab('CHART')}
+                                    onFocusEntry={handleFocusEntry}
+                                    focusedEntry={focusedEntry}
+                                    onReplay={handleStartReplay}
+                                    currentAsset={asset}
+                                    biasMatrix={biasMatrix || undefined}
+                                />
+                            </div>
                         ) : activeTab === 'BACKTEST' ? (
                             replayMode.active ? (
                                 <div className="flex-1 relative h-full">
