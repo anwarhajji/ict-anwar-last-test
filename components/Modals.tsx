@@ -1,9 +1,6 @@
-
-import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
+import React, { useMemo, useState, useRef, useEffect, ReactNode } from 'react';
 import { EntrySignal } from '../types';
 import { MODEL_INFO } from './panels/SetupsPanel';
-
-// ... (Other modal code omitted for brevity, focusing on EntryDetailModal changes)
 
 export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySignal, onClose: () => void, onReplay?: () => void }) => {
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -264,12 +261,9 @@ interface ErrorBoundaryState {
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    constructor(props: ErrorBoundaryProps) {
-        super(props);
-        this.state = {
-            hasError: false
-        };
-    }
+    state: ErrorBoundaryState = {
+        hasError: false
+    };
 
     static getDerivedStateFromError(error: any): ErrorBoundaryState {
         return { hasError: true };
@@ -290,4 +284,3 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         return this.props.children;
     }
 }
-    

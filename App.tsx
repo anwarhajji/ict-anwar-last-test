@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade, BiasMatrix, BiasState } from './types';
 import { fetchCandles, getHtf } from './services/api';
@@ -120,6 +121,11 @@ const App: React.FC = () => {
         return saved ? JSON.parse(saved) : [];
     });
     
+    // Calculate Manual PnL (Persistent across timeframes)
+    const manualNetPnL = useMemo(() => {
+        return tradeHistory.reduce((acc, t) => acc + (t.pnl || 0), 0);
+    }, [tradeHistory]);
+
     // MANUAL TRADING (Draft)
     const [draftTrade, setDraftTrade] = useState<DraftTrade | null>(null);
 
@@ -508,8 +514,13 @@ const App: React.FC = () => {
                         <span className="font-mono text-sm text-white font-bold">${balance.toLocaleString()}</span>
                     </div>
                      <div className="hidden md:flex flex-col items-end">
-                        <span className="text-[10px] text-gray-500 uppercase font-bold">PnL</span>
-                        <span className={`font-mono text-sm font-bold ${backtestStats?.netPnL && backtestStats.netPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>${backtestStats?.netPnL?.toLocaleString() || '0.00'}</span>
+                        <span className="text-[10px] text-gray-500 uppercase font-bold">Realized PnL</span>
+                        <div className="flex flex-col items-end leading-none">
+                            <span className={`font-mono text-sm font-bold ${manualNetPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>${manualNetPnL.toLocaleString()}</span>
+                            {backtestStats && (
+                                <span className={`text-[9px] font-mono mt-0.5 ${backtestStats.netPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>Algo: ${backtestStats.netPnL.toLocaleString()}</span>
+                            )}
+                        </div>
                     </div>
                     <button onClick={() => setShowTopSetups(true)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors animate-pulse">
                         TOP SETUPS
