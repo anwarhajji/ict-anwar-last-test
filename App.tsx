@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState } from './types';
+import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade } from './types';
 import { fetchCandles, getHtf } from './services/api';
 import { detectStructure, detectOrderBlocks, detectFVG, detectEntries } from './services/ict';
 import { performBacktest } from './services/backtest';
@@ -74,7 +74,6 @@ const App: React.FC = () => {
     const [replayMode, setReplayMode] = useState({ active: false, index: 0, playing: false, speed: 500 });
     const [replayDateInput, setReplayDateInput] = useState('');
     const dateInputRef = useRef<HTMLInputElement>(null);
-    // New: Replay Setup Filters
     const [replaySetupFilters, setReplaySetupFilters] = useState<Record<string, boolean>>({
         '2022 Model': true, 'Silver Bullet': true, 'Unicorn': true, 'OTE': true, 'Breaker': true, 'Standard FVG': true
     });
@@ -109,15 +108,18 @@ const App: React.FC = () => {
         const saved = localStorage.getItem('ict-sim-balance');
         return saved ? parseFloat(saved) : 50000;
     });
-    const [position, setPosition] = useState<TradeEntry | null>(() => {
-        const saved = localStorage.getItem('ict-sim-position');
-        return saved ? JSON.parse(saved) : null;
+    const [positions, setPositions] = useState<TradeEntry[]>(() => {
+        const saved = localStorage.getItem('ict-sim-positions');
+        return saved ? JSON.parse(saved) : [];
     });
     const [tradeHistory, setTradeHistory] = useState<TradeEntry[]>(() => {
         const saved = localStorage.getItem('ict-sim-history');
         return saved ? JSON.parse(saved) : [];
     });
     
+    // MANUAL TRADING (Draft)
+    const [draftTrade, setDraftTrade] = useState<DraftTrade | null>(null);
+
     // Auto-Trading/Bot State
     const [autoTrade, setAutoTrade] = useState(false);
     const [slInput, setSlInput] = useState('');
@@ -127,36 +129,88 @@ const App: React.FC = () => {
     // Persistence Effects
     useEffect(() => { localStorage.setItem('ict-sim-balance', balance.toString()); }, [balance]);
     useEffect(() => { 
-        if (position) localStorage.setItem('ict-sim-position', JSON.stringify(position)); 
-        else localStorage.removeItem('ict-sim-position');
-    }, [position]);
+        localStorage.setItem('ict-sim-positions', JSON.stringify(positions)); 
+    }, [positions]);
     useEffect(() => { localStorage.setItem('ict-sim-history', JSON.stringify(tradeHistory)); }, [tradeHistory]);
 
     // Reset Function
     const resetAccount = () => {
         if(confirm("Are you sure you want to reset your paper trading account? This action cannot be undone.")) {
             setBalance(50000);
-            setPosition(null);
+            setPositions([]);
             setTradeHistory([]);
+            setDraftTrade(null);
             localStorage.removeItem('ict-sim-balance');
-            localStorage.removeItem('ict-sim-position');
+            localStorage.removeItem('ict-sim-positions');
             localStorage.removeItem('ict-sim-history');
             setAlert({ msg: "Account Reset Successful", type: 'info' });
         }
     };
 
     // --- ACTIONS ---
-    const enterTrade = (type: 'LONG'|'SHORT', price: number, sl: number, tp: number) => { 
-        setPosition({ time: Math.floor(Date.now() / 1000) as UTCTimestamp, type, price, stopLoss: sl, takeProfit: tp, result: 'OPEN', confluences: [], score: 0 }); 
-        setAlert({ msg: `${type} Trade Opened at ${price.toFixed(2)}`, type: 'info' });
+    const enterTrade = (type: 'LONG'|'SHORT', price: number, sl: number, tp: number, lotSize: number = 1) => { 
+        const newTrade: TradeEntry = { 
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            time: Math.floor(Date.now() / 1000) as UTCTimestamp, 
+            type, 
+            price, 
+            stopLoss: sl, 
+            takeProfit: tp, 
+            lotSize,
+            result: 'OPEN', 
+            confluences: [], 
+            score: 0 
+        };
+        setPositions(prev => [...prev, newTrade]); 
+        setAlert({ msg: `${type} Trade Opened at ${price.toFixed(2)} (Lots: ${lotSize})`, type: 'info' });
     };
 
-    const closeTrade = (pnl: number) => { 
-        if (!position) return; 
+    const closeTrade = (tradeId: string, pnl: number) => { 
+        const trade = positions.find(p => p.id === tradeId);
+        if (!trade) return;
+        
         setBalance(prev => prev + pnl); 
-        setTradeHistory(prev => [{ ...position, result: pnl > 0 ? 'WIN' : 'LOSS', pnl }, ...prev]); 
-        setPosition(null); 
+        setTradeHistory(prev => [{ ...trade, result: pnl > 0 ? 'WIN' : 'LOSS', pnl }, ...prev]); 
+        setPositions(prev => prev.filter(p => p.id !== tradeId));
     };
+
+    // --- DRAFT TRADE LOGIC ---
+    const handleStartDraft = (type: 'LONG' | 'SHORT') => {
+        if (data.length === 0) return;
+        const currentPrice = data[data.length - 1].close;
+        const riskDist = currentPrice * 0.002; // 0.2% risk
+        const rewardDist = riskDist * 2; // 1:2 RR
+
+        setDraftTrade({
+            type,
+            entryPrice: currentPrice,
+            stopLoss: type === 'LONG' ? currentPrice - riskDist : currentPrice + riskDist,
+            takeProfit: type === 'LONG' ? currentPrice + rewardDist : currentPrice - rewardDist,
+            lotSize: 1.0
+        });
+    };
+
+    const handleUpdateDraft = (update: Partial<DraftTrade>) => {
+        if (!draftTrade) return;
+        setDraftTrade({ ...draftTrade, ...update });
+    };
+
+    const handleExecuteDraft = () => {
+        if (!draftTrade) return;
+        enterTrade(
+            draftTrade.type,
+            draftTrade.entryPrice,
+            draftTrade.stopLoss,
+            draftTrade.takeProfit,
+            draftTrade.lotSize
+        );
+        setDraftTrade(null);
+    };
+
+    const handleCancelDraft = () => {
+        setDraftTrade(null);
+    };
+
 
     // --- DATA FETCHING ---
     const fetchData = async () => {
@@ -230,37 +284,42 @@ const App: React.FC = () => {
 
     // --- POSITION MONITORING (TP/SL) ---
     useEffect(() => {
-        if (!position || data.length === 0) return;
+        if (positions.length === 0 || data.length === 0) return;
         const currentCandle = data[data.length - 1];
         const high = currentCandle.high;
         const low = currentCandle.low;
+        const currentPrice = currentCandle.close;
 
-        let pnl = 0;
-        let closed = false;
+        // Check all active positions
+        positions.forEach(pos => {
+            let pnl = 0;
+            let closed = false;
 
-        if (position.type === 'LONG') {
-            if (low <= position.stopLoss) {
-                pnl = position.stopLoss - position.price; // Loss
-                closed = true;
-            } else if (high >= position.takeProfit) {
-                pnl = position.takeProfit - position.price; // Win
-                closed = true;
+            if (pos.type === 'LONG') {
+                if (low <= pos.stopLoss) {
+                    pnl = (pos.stopLoss - pos.price) * pos.lotSize; // Loss
+                    closed = true;
+                } else if (high >= pos.takeProfit) {
+                    pnl = (pos.takeProfit - pos.price) * pos.lotSize; // Win
+                    closed = true;
+                }
+            } else {
+                if (high >= pos.stopLoss) {
+                     pnl = (pos.price - pos.stopLoss) * pos.lotSize; // Loss
+                     closed = true;
+                } else if (low <= pos.takeProfit) {
+                    pnl = (pos.price - pos.takeProfit) * pos.lotSize; // Win
+                    closed = true;
+                }
             }
-        } else {
-            if (high >= position.stopLoss) {
-                 pnl = position.price - position.stopLoss; // Loss
-                 closed = true;
-            } else if (low <= position.takeProfit) {
-                pnl = position.price - position.takeProfit; // Win
-                closed = true;
-            }
-        }
 
-        if (closed) {
-             closeTrade(pnl); 
-             setAlert({ msg: `Trade Closed: ${pnl > 0 ? 'Win' : 'Loss'} ($${pnl.toFixed(2)})`, type: pnl > 0 ? 'success' : 'warning' });
-        }
-    }, [data, position]);
+            if (closed) {
+                 closeTrade(pos.id, pnl); 
+                 setAlert({ msg: `Trade Closed: ${pnl > 0 ? 'Win' : 'Loss'} ($${pnl.toFixed(2)})`, type: pnl > 0 ? 'success' : 'warning' });
+            }
+        });
+
+    }, [data, positions]);
 
     // --- REPLAY LOGIC ---
     useEffect(() => {
@@ -272,12 +331,10 @@ const App: React.FC = () => {
                         return { ...prev, playing: false };
                     }
                     
-                    // Replay Notification Logic
                     const nextIndex = prev.index + 1;
                     const candle = data[nextIndex];
                     if (candle) {
                         const detectedEntry = entries.find(e => e.time === candle.time);
-                        // Check if entry exists and is allowed by replay setup filters
                         if (detectedEntry && overlays.setupFilters[detectedEntry.setupName as ICTSetupType] !== false) {
                              setAlert({ 
                                  msg: `Replay: ${detectedEntry.type} Setup Detected (${detectedEntry.setupName})`, 
@@ -311,7 +368,6 @@ const App: React.FC = () => {
                  startIndex = Math.floor(data.length / 2 + Math.random() * (data.length / 2));
             }
             
-            // Apply selected filters to main overlay state for the replay session
             setOverlays(prev => ({
                 ...prev,
                 setupFilters: { ...prev.setupFilters, ...replaySetupFilters }
@@ -326,7 +382,7 @@ const App: React.FC = () => {
 
     const handleReplayControls = {
         togglePlay: () => setReplayMode(p => ({ ...p, playing: !p.playing })),
-        changeSpeed: () => setReplayMode(p => ({ ...p, speed: p.speed === 100 ? 800 : p.speed === 800 ? 500 : p.speed === 500 ? 200 : 100 })), // cycle speeds
+        changeSpeed: () => setReplayMode(p => ({ ...p, speed: p.speed === 100 ? 800 : p.speed === 800 ? 500 : p.speed === 500 ? 200 : 100 })), 
         exit: () => {
             setReplayMode(p => ({ ...p, active: false, playing: false }));
             setSetupVisibility('ALL');
@@ -367,11 +423,10 @@ const App: React.FC = () => {
         if (activeTab === 'DASHBOARD' || activeTab === 'STATS') setActiveTab('CHART');
     };
 
-    // New Handler: View on Chart with Draggable Modal open
     const handleViewOnChart = (entry: EntrySignal) => {
         setFocusedEntry(entry);
         setSetupVisibility('FOCUS');
-        setClickedEntry(entry); // Triggers the draggable EntryDetailModal
+        setClickedEntry(entry); 
         setActiveTab('CHART');
     };
 
@@ -380,7 +435,7 @@ const App: React.FC = () => {
     const isLowTf = ['1m', '3m'].includes(timeframe);
     const visibleFvgs = isLowTf ? [] : displayedFvgs;
 
-    const isSidebarPanelOpen = !['DASHBOARD', 'CHART', 'BACKTEST', 'STATS', 'SETUPS'].includes(activeTab);
+    const isSidebarPanelOpen = !['DASHBOARD', 'CHART', 'BACKTEST', 'STATS', 'SETUPS', 'TRADING'].includes(activeTab);
     const safeStats = backtestStats || {totalTrades:0, wins:0, losses:0, winRate:0, netPnL:0, profitFactor:0, maxDrawdown:0, equityCurve:[]};
 
     return (
@@ -392,7 +447,6 @@ const App: React.FC = () => {
             {/* TOP BAR */}
             <header className="h-14 bg-[#151924] border-b border-[#2a2e39] flex items-center justify-between px-4 shrink-0 z-50">
                 <div className="flex items-center gap-4">
-                    {/* Hamburger Menu for Mobile */}
                     <button 
                         className="md:hidden text-gray-400 hover:text-white"
                         onClick={() => setMobileMenuOpen(true)}
@@ -407,7 +461,6 @@ const App: React.FC = () => {
                     <select value={asset} onChange={e => setAsset(e.target.value)} className="bg-[#0b0e11] text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500">
                         {['MGC (COMEX)', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'EURUSDT'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    {/* Timeframe Selector - Made Responsive */}
                     <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5 overflow-x-auto max-w-[120px] md:max-w-none scrollbar-hide">
                         {['1m', '5m', '15m', '1h', '4h'].map(tf => ( 
                             <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-0.5 text-xs rounded shrink-0 ${timeframe === tf ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}>{tf}</button> 
@@ -432,7 +485,7 @@ const App: React.FC = () => {
             {/* MAIN LAYOUT */}
             <div className="flex-1 flex overflow-hidden relative">
                 
-                {/* LEFT SIDEBAR (Desktop Navigation Rail) */}
+                {/* LEFT SIDEBAR */}
                 <nav className="w-16 bg-[#151924] border-r border-[#2a2e39] hidden md:flex flex-col items-center py-4 gap-2 z-40">
                     <SidebarItem active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<DashboardIcon/>} label="Dashboard" />
                     <SidebarItem active={activeTab === 'CHART'} onClick={() => setActiveTab('CHART')} icon={<ChartIcon/>} label="Chart" />
@@ -445,7 +498,7 @@ const App: React.FC = () => {
                     <SidebarItem active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<SettingsIcon/>} label="Settings" />
                 </nav>
 
-                {/* MOBILE MENU OVERLAY (Full Sidebar Items) */}
+                {/* MOBILE MENU */}
                 {mobileMenuOpen && (
                     <div className="absolute inset-0 z-[60] bg-[#151924] flex flex-col p-6 animate-in slide-in-from-left-full md:hidden">
                         <div className="flex justify-between items-center mb-8">
@@ -455,158 +508,30 @@ const App: React.FC = () => {
                             </button>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <button onClick={() => { setActiveTab('DASHBOARD'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'DASHBOARD' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <DashboardIcon /> <span className="text-sm font-bold">Dashboard</span>
-                            </button>
-                            <button onClick={() => { setActiveTab('CHART'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'CHART' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <ChartIcon /> <span className="text-sm font-bold">Chart</span>
-                            </button>
-                            <button onClick={() => { setActiveTab('SCANNER'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SCANNER' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <ListIcon /> <span className="text-sm font-bold">Scanner</span>
-                            </button>
-                             <button onClick={() => { setActiveTab('TRADING'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'TRADING' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <TradeIcon /> <span className="text-sm font-bold">Trading</span>
-                            </button>
-                             <button onClick={() => { setActiveTab('SETUPS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SETUPS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <SetupsIcon /> <span className="text-sm font-bold">Models</span>
-                            </button>
-                             <button onClick={() => { setActiveTab('STATS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'STATS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <StatsIcon /> <span className="text-sm font-bold">History</span>
-                            </button>
-                             <button onClick={() => { setActiveTab('BACKTEST'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'BACKTEST' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <BacktestIcon /> <span className="text-sm font-bold">Backtest</span>
-                            </button>
-                             <button onClick={() => { setActiveTab('SETTINGS'); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === 'SETTINGS' ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                <SettingsIcon /> <span className="text-sm font-bold">Settings</span>
-                            </button>
+                            {['DASHBOARD', 'CHART', 'SCANNER', 'TRADING', 'SETUPS', 'STATS', 'BACKTEST', 'SETTINGS'].map(tab => (
+                                <button key={tab} onClick={() => { setActiveTab(tab); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === tab ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
+                                    <span className="text-sm font-bold">{tab}</span>
+                                </button>
+                            ))}
                         </div>
                     </div>
                 )}
 
-                {/* CENTER CONTENT AREA */}
+                {/* CENTER CONTENT */}
                 <main className="flex-1 relative bg-[#0b0e11] flex flex-col min-w-0">
-                    
-                    {activeTab === 'DASHBOARD' ? (
-                        <DashboardPanel 
-                            balance={balance} 
-                            backtestStats={backtestStats} 
-                            position={position} 
-                            currentAsset={asset}
-                            onAssetChange={setAsset}
-                        />
-                    ) : activeTab === 'STATS' ? (
-                        <StatsPanel 
-                            backtestStats={safeStats} 
-                            recentHistory={recentHistory} 
-                            setClickedEntry={setClickedEntry} 
-                            onFocusEntry={handleFocusEntry}
-                            focusedEntry={focusedEntry}
-                            onReplay={handleStartReplay}
-                        />
-                    ) : activeTab === 'SETUPS' ? (
-                        <SetupsPanel 
-                            entries={entries} 
-                            setClickedEntry={setClickedEntry} 
-                            overlays={overlays}
-                            setOverlays={setOverlays}
-                            onClose={() => setActiveTab('CHART')}
-                            onViewOnChart={handleViewOnChart}
-                        />
-                    ) : activeTab === 'BACKTEST' ? (
-                        replayMode.active ? (
-                             <div className="flex-1 relative h-full">
-                                <ErrorBoundary>
-                                    <ChartComponent 
-                                        data={displayedData} obs={displayedObs} fvgs={visibleFvgs} structure={structure} entries={entries} 
-                                        overlays={overlays} colors={colors} onHoverEntry={setHoveredEntry} onClickEntry={setClickedEntry} 
-                                        onToggleOverlay={() => setOverlays(p => ({...p, killzones: !p.killzones}))} 
-                                        pdRange={pdRange} position={position} htfObs={htfObs} htfFvgs={htfFvgs}
-                                        setOverlays={setOverlays}
-                                        onReload={fetchData}
-                                        setupVisibility={setupVisibility}
-                                        setSetupVisibility={setSetupVisibility}
-                                        focusedEntry={focusedEntry}
-                                        replayState={{...replayMode, maxIndex: data.length}}
-                                        onReplayControl={handleReplayControls}
-                                    />
-                                </ErrorBoundary>
-                            </div>
-                        ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0e11] overflow-y-auto">
-                                <div className="bg-[#151924] p-8 rounded-xl border border-[#2a2e39] max-w-md w-full shadow-2xl">
-                                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                                        <div className="bg-blue-600 p-2 rounded-lg"><BacktestIcon /></div>
-                                        Replay Simulator
-                                    </h2>
-                                    <div className="space-y-6">
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Select Asset</label>
-                                            <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-white font-mono">{asset}</div>
-                                        </div>
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Start Date</label>
-                                            <div className="relative flex items-center group cursor-pointer" onClick={() => { try { dateInputRef.current?.showPicker() } catch(e) {} }}>
-                                                <input 
-                                                    ref={dateInputRef}
-                                                    type="datetime-local" 
-                                                    className="w-full bg-[#0b0e11] text-white p-3 rounded border border-[#2a2e39] focus:border-blue-500 outline-none cursor-pointer pr-10"
-                                                    value={replayDateInput}
-                                                    onChange={e => setReplayDateInput(e.target.value)}
-                                                />
-                                                <div className="absolute right-3 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
-                                                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Setup Filtering for Backtest */}
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Detect Models</label>
-                                            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-                                                {Object.keys(replaySetupFilters).map(model => (
-                                                    <label key={model} className={`flex items-center gap-2 p-2 rounded border cursor-pointer ${replaySetupFilters[model] ? 'bg-blue-900/20 border-blue-500/50' : 'bg-[#0b0e11] border-[#2a2e39]'}`}>
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={replaySetupFilters[model]} 
-                                                            onChange={() => setReplaySetupFilters(prev => ({...prev, [model]: !prev[model]}))}
-                                                            className="accent-blue-500"
-                                                        />
-                                                        <span className={`text-xs font-bold ${replaySetupFilters[model] ? 'text-white' : 'text-gray-500'}`}>{model}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <button 
-                                            onClick={() => handleStartReplay()}
-                                            className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.02]"
-                                        >
-                                            START SESSION
-                                        </button>
-                                    </div>
+                    {/* TRADING MODE OVERRIDE */}
+                    {activeTab === 'TRADING' ? (
+                        <div className="flex h-full">
+                            <div className="flex-1 relative border-r border-[#2a2e39]">
+                                <div className="absolute top-4 left-4 z-50 bg-[#151924]/80 backdrop-blur p-2 rounded border border-blue-500/30 text-xs font-bold text-blue-400 pointer-events-none">
+                                    TRADING DESK ACTIVE
                                 </div>
-                            </div>
-                        )
-                    ) : (
-                        <>
-                            <div className="h-6 bg-[#0b0e11] border-b border-[#2a2e39] flex items-center overflow-hidden whitespace-nowrap px-2 z-10 shrink-0">
-                                <div className="text-[10px] font-bold text-gray-500 mr-2">LIVE:</div>
-                                <div className="animate-marquee flex gap-8">
-                                    {entries.slice(-5).reverse().map((e, i) => ( 
-                                        <span key={i} className={`text-[10px] font-mono ${e.score >= 7 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                                            {e.type} {asset} @ {e.price.toFixed(2)} [{e.setupName}]
-                                        </span> 
-                                    ))}
-                                </div>
-                            </div>
-                            
-                            <div className="flex-1 relative">
                                 <ErrorBoundary>
                                     <ChartComponent 
                                         data={data} obs={obs} fvgs={visibleFvgs} structure={structure} entries={entries} 
                                         overlays={overlays} colors={colors} onHoverEntry={setHoveredEntry} onClickEntry={setClickedEntry} 
                                         onToggleOverlay={() => setOverlays(p => ({...p, killzones: !p.killzones}))} 
-                                        pdRange={pdRange} position={position} htfObs={htfObs} htfFvgs={htfFvgs}
+                                        pdRange={pdRange} positions={positions} htfObs={htfObs} htfFvgs={htfFvgs}
                                         setOverlays={setOverlays}
                                         onReload={fetchData}
                                         setupVisibility={setupVisibility}
@@ -614,29 +539,188 @@ const App: React.FC = () => {
                                         focusedEntry={focusedEntry}
                                         replayState={{ active: false, index: 0, playing: false, speed: 0, maxIndex: 0 }}
                                         onReplayControl={handleReplayControls}
+                                        // Draft Props
+                                        draftTrade={draftTrade}
+                                        onUpdateDraft={handleUpdateDraft}
                                     />
                                 </ErrorBoundary>
-                                
-                                {hoveredEntry && !clickedEntry && (
-                                    <div className="absolute top-4 left-16 bg-[#151924] border border-blue-500/50 p-3 rounded shadow-xl text-xs z-50 pointer-events-none">
-                                        <div className="font-bold text-white mb-1 flex items-center gap-2">
-                                            <span className={hoveredEntry.type === 'LONG' ? 'text-green-500' : 'text-red-500'}>{hoveredEntry.type}</span>
-                                            <span className="bg-gray-700 px-1 rounded text-[10px]">{hoveredEntry.setupGrade}</span>
-                                        </div>
-                                        <div className="text-gray-300 font-bold mb-1">{hoveredEntry.setupName}</div>
-                                        <div className="text-gray-400 mb-1">Win Prob: <span className="text-white">{hoveredEntry.winProbability}%</span></div>
-                                        <div className="text-gray-500 italic">{hoveredEntry.confluences[0]}</div>
-                                    </div>
-                                )}
                             </div>
-                        </>
+                            <div className="w-[340px] bg-[#151924]">
+                                <Panels 
+                                    activeTab="TRADING" setActiveTab={setActiveTab}
+                                    structure={structure} entries={entries} setClickedEntry={setClickedEntry}
+                                    balance={balance} positions={positions} data={data} closeTrade={closeTrade}
+                                    enterTrade={enterTrade} slInput={slInput} setSlInput={setSlInput}
+                                    tpInput={tpInput} setTpInput={setTpInput} autoTrade={autoTrade} setAutoTrade={setAutoTrade}
+                                    settingsTab={settingsTab} setSettingsTab={setSettingsTab}
+                                    config={config} setConfig={setConfig} overlays={overlays} setOverlays={setOverlays}
+                                    colors={colors} setColors={setColors} backtestStats={backtestStats}
+                                    recentHistory={recentHistory} obs={obs}
+                                    simulation={simulation} setSimulation={setSimulation}
+                                    onDeepScan={handleDeepScan} isScanning={isScanning}
+                                    currentAsset={asset}
+                                    resetAccount={resetAccount}
+                                    // Draft Props
+                                    draftTrade={draftTrade}
+                                    onStartDraft={handleStartDraft}
+                                    onCancelDraft={handleCancelDraft}
+                                    onExecuteDraft={handleExecuteDraft}
+                                    onUpdateDraft={handleUpdateDraft}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        activeTab === 'DASHBOARD' ? (
+                            <DashboardPanel 
+                                balance={balance} 
+                                backtestStats={backtestStats} 
+                                positions={positions} 
+                                currentAsset={asset}
+                                onAssetChange={setAsset}
+                            />
+                        ) : activeTab === 'STATS' ? (
+                            <StatsPanel 
+                                backtestStats={safeStats} 
+                                recentHistory={recentHistory}
+                                tradeHistory={tradeHistory}
+                                setClickedEntry={setClickedEntry} 
+                                onFocusEntry={handleFocusEntry}
+                                focusedEntry={focusedEntry}
+                                onReplay={handleStartReplay}
+                            />
+                        ) : activeTab === 'SETUPS' ? (
+                            <SetupsPanel 
+                                entries={entries} 
+                                setClickedEntry={setClickedEntry} 
+                                overlays={overlays}
+                                setOverlays={setOverlays}
+                                onClose={() => setActiveTab('CHART')}
+                                onViewOnChart={handleViewOnChart}
+                            />
+                        ) : activeTab === 'BACKTEST' ? (
+                            replayMode.active ? (
+                                <div className="flex-1 relative h-full">
+                                    <ErrorBoundary>
+                                        <ChartComponent 
+                                            data={displayedData} obs={displayedObs} fvgs={visibleFvgs} structure={structure} entries={entries} 
+                                            overlays={overlays} colors={colors} onHoverEntry={setHoveredEntry} onClickEntry={setClickedEntry} 
+                                            onToggleOverlay={() => setOverlays(p => ({...p, killzones: !p.killzones}))} 
+                                            pdRange={pdRange} positions={positions} htfObs={htfObs} htfFvgs={htfFvgs}
+                                            setOverlays={setOverlays}
+                                            onReload={fetchData}
+                                            setupVisibility={setupVisibility}
+                                            setSetupVisibility={setSetupVisibility}
+                                            focusedEntry={focusedEntry}
+                                            replayState={{...replayMode, maxIndex: data.length}}
+                                            onReplayControl={handleReplayControls}
+                                        />
+                                    </ErrorBoundary>
+                                </div>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0e11] overflow-y-auto">
+                                    <div className="bg-[#151924] p-8 rounded-xl border border-[#2a2e39] max-w-md w-full shadow-2xl">
+                                        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                                            <div className="bg-blue-600 p-2 rounded-lg"><BacktestIcon /></div>
+                                            Replay Simulator
+                                        </h2>
+                                        <div className="space-y-6">
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Select Asset</label>
+                                                <div className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] text-white font-mono">{asset}</div>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Start Date</label>
+                                                <div className="relative flex items-center group cursor-pointer" onClick={() => { try { dateInputRef.current?.showPicker() } catch(e) {} }}>
+                                                    <input 
+                                                        ref={dateInputRef}
+                                                        type="datetime-local" 
+                                                        className="w-full bg-[#0b0e11] text-white p-3 rounded border border-[#2a2e39] focus:border-blue-500 outline-none cursor-pointer pr-10"
+                                                        value={replayDateInput}
+                                                        onChange={e => setReplayDateInput(e.target.value)}
+                                                    />
+                                                    <div className="absolute right-3 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-400 mb-2 block uppercase">Detect Models</label>
+                                                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
+                                                    {Object.keys(replaySetupFilters).map(model => (
+                                                        <label key={model} className={`flex items-center gap-2 p-2 rounded border cursor-pointer ${replaySetupFilters[model] ? 'bg-blue-900/20 border-blue-500/50' : 'bg-[#0b0e11] border-[#2a2e39]'}`}>
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={replaySetupFilters[model]} 
+                                                                onChange={() => setReplaySetupFilters(prev => ({...prev, [model]: !prev[model]}))}
+                                                                className="accent-blue-500"
+                                                            />
+                                                            <span className={`text-xs font-bold ${replaySetupFilters[model] ? 'text-white' : 'text-gray-500'}`}>{model}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <button 
+                                                onClick={() => handleStartReplay()}
+                                                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.02]"
+                                            >
+                                                START SESSION
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        ) : (
+                            <>
+                                <div className="h-6 bg-[#0b0e11] border-b border-[#2a2e39] flex items-center overflow-hidden whitespace-nowrap px-2 z-10 shrink-0">
+                                    <div className="text-[10px] font-bold text-gray-500 mr-2">LIVE:</div>
+                                    <div className="animate-marquee flex gap-8">
+                                        {entries.slice(-5).reverse().map((e, i) => ( 
+                                            <span key={i} className={`text-[10px] font-mono ${e.score >= 7 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                                {e.type} {asset} @ {e.price.toFixed(2)} [{e.setupName}]
+                                            </span> 
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="flex-1 relative">
+                                    <ErrorBoundary>
+                                        <ChartComponent 
+                                            data={data} obs={obs} fvgs={visibleFvgs} structure={structure} entries={entries} 
+                                            overlays={overlays} colors={colors} onHoverEntry={setHoveredEntry} onClickEntry={setClickedEntry} 
+                                            onToggleOverlay={() => setOverlays(p => ({...p, killzones: !p.killzones}))} 
+                                            pdRange={pdRange} positions={positions} htfObs={htfObs} htfFvgs={htfFvgs}
+                                            setOverlays={setOverlays}
+                                            onReload={fetchData}
+                                            setupVisibility={setupVisibility}
+                                            setSetupVisibility={setSetupVisibility}
+                                            focusedEntry={focusedEntry}
+                                            replayState={{ active: false, index: 0, playing: false, speed: 0, maxIndex: 0 }}
+                                            onReplayControl={handleReplayControls}
+                                        />
+                                    </ErrorBoundary>
+                                    
+                                    {hoveredEntry && !clickedEntry && (
+                                        <div className="absolute top-4 left-16 bg-[#151924] border border-blue-500/50 p-3 rounded shadow-xl text-xs z-50 pointer-events-none">
+                                            <div className="font-bold text-white mb-1 flex items-center gap-2">
+                                                <span className={hoveredEntry.type === 'LONG' ? 'text-green-500' : 'text-red-500'}>{hoveredEntry.type}</span>
+                                                <span className="bg-gray-700 px-1 rounded text-[10px]">{hoveredEntry.setupGrade}</span>
+                                            </div>
+                                            <div className="text-gray-300 font-bold mb-1">{hoveredEntry.setupName}</div>
+                                            <div className="text-gray-400 mb-1">Win Prob: <span className="text-white">{hoveredEntry.winProbability}%</span></div>
+                                            <div className="text-gray-500 italic">{hoveredEntry.confluences[0]}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )
                     )}
                 </main>
 
-                {/* RIGHT SIDEBAR (Tools) - Modified for Mobile Visibility */}
+                {/* RIGHT SIDEBAR (Standard, hidden if Trading Desk Active) */}
                 {isSidebarPanelOpen && (
                     <aside className="absolute inset-0 z-40 md:static md:flex w-full md:w-[320px] bg-[#151924] border-l border-[#2a2e39] flex-col shadow-xl">
-                        {/* Mobile Close Button for Side Panel */}
                         <div className="md:hidden p-2 bg-[#1e222d] border-b border-[#2a2e39] flex justify-end">
                             <button onClick={() => setActiveTab('CHART')} className="text-gray-400 hover:text-white flex items-center gap-2 text-sm font-bold bg-gray-800 px-3 py-1 rounded">
                                 Close Panel <XIcon />
@@ -645,7 +729,7 @@ const App: React.FC = () => {
                         <Panels 
                             activeTab={activeTab} setActiveTab={setActiveTab}
                             structure={structure} entries={entries} setClickedEntry={setClickedEntry}
-                            balance={balance} position={position} data={data} closeTrade={closeTrade}
+                            balance={balance} positions={positions} data={data} closeTrade={closeTrade}
                             enterTrade={enterTrade} slInput={slInput} setSlInput={setSlInput}
                             tpInput={tpInput} setTpInput={setTpInput} autoTrade={autoTrade} setAutoTrade={setAutoTrade}
                             settingsTab={settingsTab} setSettingsTab={setSettingsTab}
@@ -665,7 +749,7 @@ const App: React.FC = () => {
                 )}
             </div>
             
-            {/* MOBILE NAVIGATION BAR (Bottom) */}
+            {/* MOBILE NAV */}
              <nav className="md:hidden h-16 bg-[#151924] border-t border-[#2a2e39] flex items-center justify-around shrink-0 z-50 pb-safe">
                  <button onClick={() => setActiveTab('DASHBOARD')} className={`flex flex-col items-center gap-1 ${activeTab === 'DASHBOARD' ? 'text-blue-500' : 'text-gray-500'}`}>
                     <DashboardIcon /> <span className="text-[10px]">Home</span>

@@ -47,15 +47,25 @@ export interface OrderBlock {
 }
 
 export interface TradeEntry {
+    id: string;
     time: UTCTimestamp;
     type: 'LONG' | 'SHORT';
     price: number;
     stopLoss: number;
     takeProfit: number;
+    lotSize: number;
     result?: 'WIN' | 'LOSS' | 'OPEN';
     pnl?: number;
     confluences: string[];
     score: number;
+}
+
+export interface DraftTrade {
+    type: 'LONG' | 'SHORT';
+    entryPrice: number;
+    stopLoss: number;
+    takeProfit: number;
+    lotSize: number;
 }
 
 export interface EntrySignal {
@@ -73,10 +83,15 @@ export interface EntrySignal {
     backtestPnL?: number;
     lotSize?: number;
     exitTime?: UTCTimestamp;
-    setupName: ICTSetupType | string; // Updated to specific type
+    setupName: ICTSetupType | string;
     setupGrade?: string;
     confluenceLevel?: number; 
     timeframe?: string;
+    sweptLevel?: {
+        price: number;
+        time: UTCTimestamp;
+        type: 'BSL' | 'SSL';
+    };
 }
 
 export interface BacktestStats {
@@ -108,7 +123,6 @@ export interface OverlayState {
     backtestMarkers: boolean;
     macro: boolean;
     historicalTradeLines: boolean;
-    // Granular Setup Visibility
     setupFilters: {
         [key in ICTSetupType]: boolean;
     };

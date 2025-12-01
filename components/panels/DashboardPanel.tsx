@@ -5,7 +5,7 @@ import { BacktestStats, TradeEntry } from '../../types';
 interface DashboardPanelProps {
     balance: number;
     backtestStats: BacktestStats | null;
-    position: TradeEntry | null;
+    positions: TradeEntry[];
     currentAsset: string;
     onAssetChange: (asset: string) => void;
     onClose?: () => void;
@@ -14,7 +14,7 @@ interface DashboardPanelProps {
 export const DashboardPanel: React.FC<DashboardPanelProps> = ({ 
     balance, 
     backtestStats, 
-    position, 
+    positions, 
     currentAsset, 
     onAssetChange, 
     onClose 
@@ -28,7 +28,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     };
     
     // SAFETY CHECKS: Ensure no NaN/Infinite values pass to the DOM/Styles
-    const safeWinRate = (!stats.winRate || isNaN(stats.winRate) || !isFinite(stats.winRate)) ? 0 : stats.winRate;
+    const safeWinRateVal = (!stats.winRate || isNaN(stats.winRate) || !isFinite(stats.winRate)) ? 0 : stats.winRate;
     const safeProfitFactor = (!stats.profitFactor || isNaN(stats.profitFactor) || !isFinite(stats.profitFactor)) ? 0 : stats.profitFactor;
     const safeTotalTrades = stats.totalTrades || 0;
     const safePnL = (!stats.netPnL || isNaN(stats.netPnL)) ? 0 : stats.netPnL;
@@ -72,7 +72,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                  <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">15m</div>
                  <h3 className="text-xl font-bold text-blue-400 mb-4">Swing / Day (15m)</h3>
                  <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.min(safeWinRate + 5, 100).toFixed(1)}%</span></div>
+                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.min(safeWinRateVal + 5, 100).toFixed(1)}%</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">2.5R</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">Low</span></div>
                      <div className="mt-4 pt-4 border-t border-gray-700">
@@ -86,7 +86,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                  <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">5m</div>
                  <h3 className="text-xl font-bold text-yellow-400 mb-4">Intraday (5m)</h3>
                  <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{safeWinRate.toFixed(1)}%</span></div>
+                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{safeWinRateVal.toFixed(1)}%</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">2.0R</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">Medium</span></div>
                      <div className="mt-4 pt-4 border-t border-gray-700">
@@ -100,7 +100,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                  <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl font-bold text-white">1m</div>
                  <h3 className="text-xl font-bold text-red-400 mb-4">Scalping (1m)</h3>
                  <div className="space-y-4">
-                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.max(safeWinRate - 8, 30).toFixed(1)}%</span></div>
+                     <div className="flex justify-between"><span className="text-gray-400">Win Rate</span><span className="text-white font-bold">{Math.max(safeWinRateVal - 8, 30).toFixed(1)}%</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Avg Reward</span><span className="text-green-400 font-bold">1.5R</span></div>
                      <div className="flex justify-between"><span className="text-gray-400">Frequency</span><span className="text-white">High</span></div>
                      <div className="mt-4 pt-4 border-t border-gray-700">
@@ -203,7 +203,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                             />
                             <MetricCard 
                                 title="Win Rate" 
-                                value={`${safeWinRate.toFixed(1)}%`} 
+                                value={`${safeWinRateVal.toFixed(1)}%`} 
                                 subValue={`${stats.wins}W - ${stats.losses}L`} 
                                 color="bg-yellow-500" 
                             />
@@ -223,19 +223,19 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                                         <div className="absolute inset-0 rounded-full border-[12px] border-blue-500 transition-all duration-1000 ease-out" 
                                              style={{ 
                                                  clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`, 
-                                                 transform: `rotate(${safeWinRate ? (safeWinRate/100)*360 : 0}deg)`, 
+                                                 transform: `rotate(${safeWinRateVal ? (safeWinRateVal/100)*360 : 0}deg)`, 
                                                  opacity: 0.8 
                                              }}>
                                         </div>
                                         <div className="text-center z-10">
-                                            <div className="text-3xl font-bold text-white">{safeWinRate.toFixed(0)}%</div>
+                                            <div className="text-3xl font-bold text-white">{safeWinRateVal.toFixed(0)}%</div>
                                             <div className="text-[10px] text-gray-500 uppercase tracking-wide">Efficiency</div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="space-y-6">
-                                     <ProgressBar label="Winning Trades" value={safeWinRate} color="bg-blue-500" />
-                                     <ProgressBar label="Losing Trades" value={100 - safeWinRate} color="bg-red-500" />
+                                     <ProgressBar label="Winning Trades" value={safeWinRateVal} color="bg-blue-500" />
+                                     <ProgressBar label="Losing Trades" value={100 - safeWinRateVal} color="bg-red-500" />
                                 </div>
                             </div>
 

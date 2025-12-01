@@ -1,5 +1,5 @@
 
-import { CandleData, EntrySignal, FVG, OrderBlock, SessionType, StructurePoint, ICTSetupType } from '../types';
+import { CandleData, EntrySignal, FVG, OrderBlock, SessionType, StructurePoint, ICTSetupType, UTCTimestamp } from '../types';
 
 // --- UTILS ---
 export const getSession = (hour: number): SessionType => {
@@ -179,6 +179,7 @@ export const detectEntries = (
         let confluenceLevel: number | undefined = undefined;
         let setupName: ICTSetupType = 'Standard FVG';
         let direction: 'LONG' | 'SHORT' | null = null;
+        let sweptLevel: { price: number, time: UTCTimestamp, type: 'BSL' | 'SSL' } | undefined = undefined;
 
         // --- CONTEXT CHECKS ---
         const hour = new Date((candle.time as number) * 1000).getUTCHours();
@@ -200,13 +201,24 @@ export const detectEntries = (
             if (session !== 'NONE') score += 1;
             
             // Check for Liquidity Sweep (Turtle Soup / 2022 Model)
-            // Did price dip below a recent low recently?
-            const recentSweep = rangeData.slice(-20).some(c => {
-                const prevLow = recentLows.find(l => (l.time as number) < (c.time as number) && (l.time as number) > (c.time as number) - 10000);
-                return prevLow && c.low < prevLow.price;
-            });
+            // Look for a specific Low in recent history that was breached by price within the lookback window
+            const rangeCandles = rangeData.slice(-25); // Look closer for the sweep event
+            let foundSweep = false;
             
-            if (recentSweep) {
+            // Find a swing low that is older than the current range candles, but was swept by one of them
+            // Iterating backwards to find the most relevant recent sweep
+            for(let cIdx = rangeCandles.length - 1; cIdx >= 0; cIdx--) {
+                const rangeC = rangeCandles[cIdx];
+                const sweptLow = recentLows.find(l => (l.time as number) < (rangeC.time as number) && rangeC.low < l.price && (rangeC.time as number) - (l.time as number) < 3600 * 4); // Within last 4 hours
+                
+                if (sweptLow) {
+                    foundSweep = true;
+                    sweptLevel = { price: sweptLow.price, time: sweptLow.time, type: 'SSL' };
+                    break;
+                }
+            }
+            
+            if (foundSweep) {
                 setupName = '2022 Model';
                 score += 3;
                 confluences.push('SSL Swept');
@@ -247,12 +259,21 @@ export const detectEntries = (
             if (session !== 'NONE') score += 1;
 
             // Liquidity Sweep Check
-            const recentSweep = rangeData.slice(-20).some(c => {
-                const prevHigh = recentHighs.find(h => (h.time as number) < (c.time as number) && (h.time as number) > (c.time as number) - 10000);
-                return prevHigh && c.high > prevHigh.price;
-            });
+            const rangeCandles = rangeData.slice(-25);
+            let foundSweep = false;
+            
+            for(let cIdx = rangeCandles.length - 1; cIdx >= 0; cIdx--) {
+                const rangeC = rangeCandles[cIdx];
+                const sweptHigh = recentHighs.find(h => (h.time as number) < (rangeC.time as number) && rangeC.high > h.price && (rangeC.time as number) - (h.time as number) < 3600 * 4);
+                
+                if (sweptHigh) {
+                    foundSweep = true;
+                    sweptLevel = { price: sweptHigh.price, time: sweptHigh.time, type: 'BSL' };
+                    break;
+                }
+            }
 
-            if (recentSweep) {
+            if (foundSweep) {
                 setupName = '2022 Model';
                 score += 3;
                 confluences.push('BSL Swept');
@@ -315,7 +336,8 @@ export const detectEntries = (
                 setupName,
                 setupGrade,
                 confluenceLevel,
-                timeframe
+                timeframe,
+                sweptLevel // Pass the detected liquidity level
              });
              lastSignalTime = candle.time as number;
         }

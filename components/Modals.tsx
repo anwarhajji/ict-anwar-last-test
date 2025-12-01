@@ -1,7 +1,8 @@
-
 import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
 import { EntrySignal } from '../types';
 import { MODEL_INFO } from './panels/SetupsPanel';
+
+// ... (Existing components: EntryDetailModal, TopSetupsModal, ToastNotification)
 
 export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySignal, onClose: () => void, onReplay?: () => void }) => {
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -252,10 +253,9 @@ interface ErrorBoundaryState {
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    state: ErrorBoundaryState = { hasError: false };
-
     constructor(props: ErrorBoundaryProps) {
         super(props);
+        this.state = { hasError: false };
     }
 
     static getDerivedStateFromError(error: any): ErrorBoundaryState {

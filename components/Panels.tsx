@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AppConfig, BacktestStats, ColorTheme, EntrySignal, OrderBlock, OverlayState, StructurePoint, TradeEntry, SimulationConfig } from '../types';
+import { AppConfig, BacktestStats, ColorTheme, EntrySignal, OrderBlock, OverlayState, StructurePoint, TradeEntry, SimulationConfig, DraftTrade } from '../types';
 import { ScannerPanel } from './panels/ScannerPanel';
 import { TradingPanel } from './panels/TradingPanel';
 import { SetupsPanel } from './panels/SetupsPanel';
@@ -13,10 +13,10 @@ interface PanelProps {
     entries: EntrySignal[];
     setClickedEntry: (e: EntrySignal) => void;
     balance: number;
-    position: TradeEntry | null;
+    positions: TradeEntry[];
     data: any[];
-    closeTrade: (pnl: number) => void;
-    enterTrade: (type: 'LONG' | 'SHORT', price: number, sl: number, tp: number) => void;
+    closeTrade: (id: string, pnl: number) => void;
+    enterTrade: (type: 'LONG' | 'SHORT', price: number, sl: number, tp: number, lotSize: number) => void;
     slInput: string; setSlInput: (s: string) => void;
     tpInput: string; setTpInput: (s: string) => void;
     autoTrade: boolean; setAutoTrade: (b: boolean) => void;
@@ -37,10 +37,18 @@ interface PanelProps {
     onViewOnChart?: (e: EntrySignal) => void;
     currentAsset?: string;
     resetAccount?: () => void;
+    
+    // Draft Trade Props (Optional for other panels, needed for Trading)
+    draftTrade?: DraftTrade | null;
+    onStartDraft?: (type: 'LONG' | 'SHORT') => void;
+    onCancelDraft?: () => void;
+    onExecuteDraft?: () => void;
+    onUpdateDraft?: (u: Partial<DraftTrade>) => void;
 }
 
 export const Panels: React.FC<PanelProps> = (props) => {
     // If on main page tabs, show nothing in the panel container
+    // Removed 'TRADING' from this list so the TradingPanel can render in the custom layout
     if (['CHART', 'DASHBOARD', 'BACKTEST', 'STATS', 'SETUPS'].includes(props.activeTab) || !props.activeTab) return null;
 
     const commonProps = { onClose: () => props.setActiveTab('CHART') };
@@ -62,7 +70,7 @@ export const Panels: React.FC<PanelProps> = (props) => {
         case 'TRADING':
             return <TradingPanel 
                 balance={props.balance} 
-                position={props.position} 
+                positions={props.positions} 
                 data={props.data} 
                 closeTrade={props.closeTrade} 
                 enterTrade={props.enterTrade} 
@@ -70,9 +78,15 @@ export const Panels: React.FC<PanelProps> = (props) => {
                 tpInput={props.tpInput} setTpInput={props.setTpInput} 
                 autoTrade={props.autoTrade} setAutoTrade={props.setAutoTrade} 
                 resetAccount={props.resetAccount}
+                // Draft
+                draftTrade={props.draftTrade}
+                onStartDraft={props.onStartDraft}
+                onCancelDraft={props.onCancelDraft}
+                onExecuteDraft={props.onExecuteDraft}
+                onUpdateDraft={props.onUpdateDraft}
                 {...commonProps}
             />;
-        case 'SETUPS': // Note: This case might be redundant if SETUPS is treated as a main tab, but keeping for compatibility if moved to sidebar.
+        case 'SETUPS': 
             return <SetupsPanel 
                 entries={props.entries} 
                 setClickedEntry={props.setClickedEntry} 

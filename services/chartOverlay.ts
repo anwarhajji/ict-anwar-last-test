@@ -1,5 +1,6 @@
+
 import { ISeriesApi, ITimeScaleApi, Time } from "lightweight-charts";
-import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, ColorTheme, UTCTimestamp } from "../types";
+import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, ColorTheme, UTCTimestamp, DraftTrade } from "../types";
 import { drawSetups } from "./drawSetups";
 
 export const drawCanvasLayer = (
@@ -18,7 +19,8 @@ export const drawCanvasLayer = (
     height: number,
     htfObs: OrderBlock[] = [],
     htfFvgs: FVG[] = [],
-    setupVisibility: 'ALL' | 'FOCUS' | 'NONE' = 'NONE'
+    setupVisibility: 'ALL' | 'FOCUS' | 'NONE' = 'NONE',
+    draftTrade?: DraftTrade
 ) => {
     // Clear both Canvases
     ctxBg.clearRect(0, 0, width, height);
@@ -117,19 +119,15 @@ export const drawCanvasLayer = (
     }
 
     // --- 4. TRADE SETUPS (BOXES & LINES) ---
-    // Rule: Draw if 'historicalTradeLines' is checked OR if we are in FOCUS mode (forcing a single trade visibility)
-    if ((overlays.historicalTradeLines || setupVisibility === 'FOCUS') && entries.length > 0) {
-        // Draw Background Elements (Boxes, Connector Lines) on ctxBg
-        drawSetups(ctxBg, timeScale, series, data, entries, true, width, 'bg');
-    }
+    const showHistorical = overlays.historicalTradeLines || setupVisibility === 'FOCUS';
+    // Draw Background Elements (Boxes, Connector Lines) on ctxBg
+    drawSetups(ctxBg, timeScale, series, data, entries, showHistorical, width, 'bg', draftTrade);
 
     // ============================================
     // DRAW ON FOREGROUND (ctxFg) - Z-Index 20
     // ============================================
 
     // --- 5. TRADE SETUPS (LABELS & ICONS) ---
-    if ((overlays.historicalTradeLines || setupVisibility === 'FOCUS') && entries.length > 0) {
-        // Draw Foreground Elements (Text Labels, Icons) on ctxFg
-        drawSetups(ctxFg, timeScale, series, data, entries, true, width, 'fg');
-    }
+    // Draw Foreground Elements (Text Labels, Icons) on ctxFg
+    drawSetups(ctxFg, timeScale, series, data, entries, showHistorical, width, 'fg', draftTrade);
 };

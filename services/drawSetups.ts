@@ -1,5 +1,6 @@
+
 import { ISeriesApi, ITimeScaleApi, Time } from "lightweight-charts";
-import { CandleData, EntrySignal } from "../types";
+import { CandleData, EntrySignal, DraftTrade } from "../types";
 
 export const drawSetups = (
     ctx: CanvasRenderingContext2D,
@@ -9,17 +10,9 @@ export const drawSetups = (
     entries: EntrySignal[],
     visible: boolean,
     width: number,
-    layer: 'bg' | 'fg' = 'bg'
+    layer: 'bg' | 'fg' = 'bg',
+    draftTrade?: DraftTrade // Optional Draft Trade
 ) => {
-    if (!visible || entries.length === 0 || data.length === 0) return;
-
-    const visibleRange = timeScale.getVisibleLogicalRange();
-    if (!visibleRange) return;
-    
-    // Get visible time boundaries to handle off-screen drawing
-    const firstVisibleIndex = Math.max(0, Math.floor(visibleRange.from));
-    const firstVisibleTime = data[firstVisibleIndex]?.time as number;
-
     // Helper to draw label
     const drawLabel = (text: string, x: number, y: number, color: string, align: 'left' | 'right' | 'center' = 'left', bg: string = '#ffffff') => {
         ctx.font = 'bold 10px Inter, sans-serif';
@@ -49,6 +42,86 @@ export const drawSetups = (
         ctx.textBaseline = 'middle';
         ctx.fillText(text, drawX + pad, y);
     };
+
+    // --- DRAW DRAFT TRADE VISUALIZER ---
+    if (draftTrade) {
+        // Only proceed if coordinate system valid
+        const currentCandle = data[data.length - 1];
+        if (!currentCandle) return;
+
+        // X coords: Start at current time, extend right
+        const x1 = timeScale.timeToCoordinate(currentCandle.time);
+        const x2 = width; // extend to edge
+        
+        const yEntry = series.priceToCoordinate(draftTrade.entryPrice);
+        const ySL = series.priceToCoordinate(draftTrade.stopLoss);
+        const yTP = series.priceToCoordinate(draftTrade.takeProfit);
+
+        if (x1 !== null && yEntry !== null && ySL !== null && yTP !== null) {
+            
+            if (layer === 'bg') {
+                // Background Zones
+                const boxW = Math.max(x2 - x1, 50);
+
+                // Risk Zone (Red)
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                const hRisk = ySL - yEntry;
+                ctx.fillRect(x1, yEntry, boxW, hRisk);
+                ctx.strokeRect(x1, yEntry, boxW, hRisk);
+
+                // Reward Zone (Green)
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+                const hReward = yTP - yEntry;
+                ctx.fillRect(x1, yEntry, boxW, hReward);
+                ctx.strokeRect(x1, yEntry, boxW, hReward);
+                
+                // Lines
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 2]);
+                
+                // Entry Line (Blue/Gray)
+                ctx.strokeStyle = '#9ca3af';
+                ctx.beginPath(); ctx.moveTo(x1, yEntry); ctx.lineTo(width, yEntry); ctx.stroke();
+                
+                // SL Line (Red)
+                ctx.strokeStyle = '#ef4444';
+                ctx.beginPath(); ctx.moveTo(x1, ySL); ctx.lineTo(width, ySL); ctx.stroke();
+                
+                // TP Line (Green)
+                ctx.strokeStyle = '#22c55e';
+                ctx.beginPath(); ctx.moveTo(x1, yTP); ctx.lineTo(width, yTP); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            if (layer === 'fg') {
+                // Labels
+                const risk = Math.abs(draftTrade.entryPrice - draftTrade.stopLoss);
+                const reward = Math.abs(draftTrade.entryPrice - draftTrade.takeProfit);
+                const rr = risk > 0 ? reward / risk : 0;
+                
+                drawLabel(`ENTRY: ${draftTrade.entryPrice.toFixed(2)}`, x1 + 10, yEntry, '#000', 'left', '#e5e7eb');
+                drawLabel(`STOP: ${draftTrade.stopLoss.toFixed(2)} (-$${(risk * draftTrade.lotSize).toFixed(2)})`, x1 + 10, ySL, '#fff', 'left', '#ef4444');
+                drawLabel(`TARGET: ${draftTrade.takeProfit.toFixed(2)} (+$${(reward * draftTrade.lotSize).toFixed(2)})`, x1 + 10, yTP, '#fff', 'left', '#22c55e');
+                
+                // Center RR Label
+                const midY = (yTP + ySL) / 2; // Center of whole setup? No, usually center of Risk/Reward boxes separately
+                // Put it near entry
+                drawLabel(`R:R ${rr.toFixed(2)}`, x1 + 50, yEntry + (draftTrade.type === 'LONG' ? -15 : 15), '#fff', 'left', '#3b82f6');
+            }
+        }
+    }
+
+    // --- DRAW HISTORICAL TRADES ---
+    if (!visible || entries.length === 0 || data.length === 0) return;
+
+    const visibleRange = timeScale.getVisibleLogicalRange();
+    if (!visibleRange) return;
+    
+    // Get visible time boundaries to handle off-screen drawing
+    const firstVisibleIndex = Math.max(0, Math.floor(visibleRange.from));
+    const firstVisibleTime = data[firstVisibleIndex]?.time as number;
 
     entries.forEach(entry => {
         const entryTime = entry.time as number;
@@ -106,6 +179,41 @@ export const drawSetups = (
         // BACKGROUND LAYER DRAWING
         // ==========================
         if (layer === 'bg') {
+            // --- DRAW SWEPT LIQUIDITY LINE (For 2022 Model) ---
+            if (entry.sweptLevel) {
+                const ySwept = series.priceToCoordinate(entry.sweptLevel.price);
+                const xSweptOrigin = timeScale.timeToCoordinate(entry.sweptLevel.time);
+                
+                // Only draw if within reasonable bounds
+                if (ySwept !== null && xSweptOrigin !== null) {
+                    // Line from Liquidity Point to Entry
+                    ctx.beginPath();
+                    ctx.moveTo(xSweptOrigin, ySwept);
+                    ctx.lineTo(x1, ySwept);
+                    ctx.strokeStyle = '#FFD700'; // Gold color for liquidity
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Draw 'X' at the original liquidity point
+                    const crossSize = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(xSweptOrigin - crossSize, ySwept - crossSize);
+                    ctx.lineTo(xSweptOrigin + crossSize, ySwept + crossSize);
+                    ctx.moveTo(xSweptOrigin + crossSize, ySwept - crossSize);
+                    ctx.lineTo(xSweptOrigin - crossSize, ySwept + crossSize);
+                    ctx.strokeStyle = '#FFD700';
+                    ctx.stroke();
+
+                    // Label above the line
+                    ctx.fillStyle = '#FFD700';
+                    ctx.font = '9px Inter';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`${entry.sweptLevel.type} Swept`, x1 - 5, ySwept - 4);
+                }
+            }
+
             // --- DRAW "CAUSE" LINE (Exact Entry Indicator) ---
             if (entry.confluenceLevel) {
                 const yConf = series.priceToCoordinate(entry.confluenceLevel);

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
     createChart, 
@@ -11,7 +12,7 @@ import {
     IPriceLine,
     CrosshairMode
 } from 'lightweight-charts';
-import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, StructurePoint, TradeEntry, ColorTheme, ICTSetupType } from '../types';
+import { CandleData, EntrySignal, FVG, OrderBlock, OverlayState, StructurePoint, TradeEntry, ColorTheme, ICTSetupType, DraftTrade } from '../types';
 import { drawCanvasLayer } from '../services/chartOverlay';
 import { ChartControls } from './ChartControls';
 import { ReplayControls } from './ReplayControls';
@@ -28,7 +29,7 @@ interface ChartProps {
     onClickEntry: (entry: EntrySignal | null) => void;
     onToggleOverlay: () => void;
     pdRange: { high: number, low: number } | null;
-    position: TradeEntry | null;
+    positions: TradeEntry[];
     htfObs: OrderBlock[];
     htfFvgs: FVG[];
     setOverlays: (o: OverlayState) => void;
@@ -51,7 +52,11 @@ interface ChartProps {
         exit: () => void;
         seek: (val: number) => void;
         showAll?: () => void;
-    }
+    };
+
+    // Draft Trade Props
+    draftTrade?: DraftTrade | null;
+    onUpdateDraft?: (update: Partial<DraftTrade>) => void;
 }
 
 export const ChartComponent: React.FC<ChartProps> = (props) => {
@@ -68,6 +73,10 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     const activeTradeLinesRef = useRef<IPriceLine[]>([]);
     const mousePos = useRef<{ x: number, y: number } | null>(null);
     const drawCanvasOverlayRef = useRef<() => void>(() => {});
+
+    // Drag Interaction State
+    const draggingLineRef = useRef<'ENTRY' | 'SL' | 'TP' | null>(null);
+    const isMouseDownRef = useRef(false);
 
     // Filtered Entries based on Visibility Mode, Setup Types, and Replay Time
     const visibleEntries = useMemo(() => {
@@ -179,14 +188,14 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             if (param.point) mousePos.current = param.point;
             else mousePos.current = null;
             if (drawCanvasOverlayRef.current) requestAnimationFrame(drawCanvasOverlayRef.current);
-            if (param.time && visibleEntries.length > 0) {
+            if (param.time && visibleEntries.length > 0 && !props.draftTrade) {
                 const e = visibleEntries.find((x: any) => Math.abs(x.time - (param.time as number)) < 300);
                 props.onHoverEntry(e || null);
             } else props.onHoverEntry(null);
         });
         
         chart.subscribeClick(param => {
-            if (param.time) {
+            if (param.time && !props.draftTrade) {
                 const clickTime = param.time as number;
                 const e = visibleEntries.find((x: any) => Math.abs(x.time - clickTime) < 300); 
                 if (e) props.onClickEntry(e);
@@ -206,6 +215,84 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             }
         };
     }, []);
+
+    // --- DRAG INTERACTION LOGIC ---
+    useEffect(() => {
+        const container = chartContainerRef.current;
+        if (!container || !props.draftTrade || !props.onUpdateDraft || !candleSeriesRef.current) return;
+
+        const getHoveredLine = (y: number, prices: { entry: number, sl: number, tp: number }) => {
+            if (!candleSeriesRef.current) return null;
+            const entryY = candleSeriesRef.current.priceToCoordinate(prices.entry);
+            const slY = candleSeriesRef.current.priceToCoordinate(prices.sl);
+            const tpY = candleSeriesRef.current.priceToCoordinate(prices.tp);
+
+            if (entryY && Math.abs(y - entryY) < 10) return 'ENTRY';
+            if (slY && Math.abs(y - slY) < 10) return 'SL';
+            if (tpY && Math.abs(y - tpY) < 10) return 'TP';
+            return null;
+        };
+
+        const handleMouseDown = (e: MouseEvent) => {
+            if (!props.draftTrade) return;
+            const rect = container.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            
+            const hovered = getHoveredLine(y, {
+                entry: props.draftTrade.entryPrice,
+                sl: props.draftTrade.stopLoss,
+                tp: props.draftTrade.takeProfit
+            });
+
+            if (hovered) {
+                isMouseDownRef.current = true;
+                draggingLineRef.current = hovered;
+                container.style.cursor = 'ns-resize';
+            }
+        };
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!props.draftTrade || !candleSeriesRef.current) return;
+            const rect = container.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+
+            // Handle Dragging
+            if (isMouseDownRef.current && draggingLineRef.current) {
+                const newPrice = candleSeriesRef.current.coordinateToPrice(y);
+                if (newPrice) {
+                    if (draggingLineRef.current === 'ENTRY') props.onUpdateDraft({ entryPrice: newPrice });
+                    else if (draggingLineRef.current === 'SL') props.onUpdateDraft({ stopLoss: newPrice });
+                    else if (draggingLineRef.current === 'TP') props.onUpdateDraft({ takeProfit: newPrice });
+                }
+                return;
+            }
+
+            // Handle Hover Cursor
+            const hovered = getHoveredLine(y, {
+                entry: props.draftTrade.entryPrice,
+                sl: props.draftTrade.stopLoss,
+                tp: props.draftTrade.takeProfit
+            });
+            container.style.cursor = hovered ? 'ns-resize' : 'default';
+        };
+
+        const handleMouseUp = () => {
+            isMouseDownRef.current = false;
+            draggingLineRef.current = null;
+            container.style.cursor = 'default';
+        };
+
+        container.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            container.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [props.draftTrade, props.onUpdateDraft]); // Re-bind when draft trade updates to get fresh values
+
 
     const handleZoom = (delta: number) => {
         const chart = chartRef.current;
@@ -278,24 +365,28 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
     useEffect(() => {
         if (!candleSeriesRef.current) return;
         try {
+             // Clear existing trade lines
              activeTradeLinesRef.current.forEach(l => candleSeriesRef.current?.removePriceLine(l));
              activeTradeLinesRef.current = [];
             
-             if (props.position) {
-                activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                    price: props.position.price, color: '#00B0FF', lineWidth: 3, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY' 
-                }));
-                if (props.position.stopLoss) {
+             // Draw lines for ALL active positions
+             props.positions.forEach(pos => {
+                if(candleSeriesRef.current) {
                     activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                        price: props.position.stopLoss, color: '#FF3D00', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' 
+                        price: pos.price, color: '#00B0FF', lineWidth: 3, lineStyle: 0, axisLabelVisible: true, title: `ENTRY ${pos.type}` 
                     }));
+                    if (pos.stopLoss) {
+                        activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
+                            price: pos.stopLoss, color: '#FF3D00', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' 
+                        }));
+                    }
+                    if (pos.takeProfit) {
+                        activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
+                            price: pos.takeProfit, color: '#2962FF', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'TP' 
+                        }));
+                    }
                 }
-                if (props.position.takeProfit) {
-                    activeTradeLinesRef.current.push(candleSeriesRef.current.createPriceLine({ 
-                        price: props.position.takeProfit, color: '#2962FF', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'TP' 
-                    }));
-                }
-            }
+             });
 
             const markers: SeriesMarker<Time>[] = [];
             const lastTime = props.data.length > 0 ? props.data[props.data.length - 1].time as number : Infinity;
@@ -326,7 +417,7 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
 
         } catch (err) { console.warn("Error updating chart markers/lines:", err); }
         requestAnimationFrame(drawCanvasOverlay);
-    }, [props.position, props.structure, visibleEntries, props.overlays, props.data, props.setupVisibility]);
+    }, [props.positions, props.structure, visibleEntries, props.overlays, props.data, props.setupVisibility]);
 
     // Canvas Overlay Drawing
     const drawCanvasOverlay = useCallback(() => {
@@ -360,9 +451,10 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
         drawCanvasLayer(
             ctxBg,
             ctxFg,
-            timeScale, series, props.data, props.obs, props.fvgs, visibleEntries, props.overlays, props.colors, props.pdRange, container.clientWidth, container.clientHeight, props.htfObs, props.htfFvgs, props.setupVisibility
+            timeScale, series, props.data, props.obs, props.fvgs, visibleEntries, props.overlays, props.colors, props.pdRange, container.clientWidth, container.clientHeight, props.htfObs, props.htfFvgs, props.setupVisibility,
+            props.draftTrade || undefined
         );
-    }, [props.data, props.obs, props.fvgs, props.htfObs, props.htfFvgs, visibleEntries, props.pdRange, props.overlays, props.colors, props.setupVisibility]);
+    }, [props.data, props.obs, props.fvgs, props.htfObs, props.htfFvgs, visibleEntries, props.pdRange, props.overlays, props.colors, props.setupVisibility, props.draftTrade]);
 
     useEffect(() => {
         drawCanvasOverlayRef.current = drawCanvasOverlay;
