@@ -22,6 +22,7 @@ interface TradingPanelProps {
 }
 
 export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
+    const [showConfirmation, setShowConfirmation] = useState(false);
     const currentPrice = props.data.length > 0 ? props.data[props.data.length - 1].close : 0;
     
     const riskAmount = props.draftTrade 
@@ -32,8 +33,82 @@ export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
         : 0;
     const rr = riskAmount > 0 ? rewardAmount / riskAmount : 0;
 
+    const handleExecuteClick = () => {
+        setShowConfirmation(true);
+    };
+
+    const confirmOrder = () => {
+        if (props.onExecuteDraft) props.onExecuteDraft();
+        setShowConfirmation(false);
+    };
+
     return (
-        <div className="h-full flex flex-col bg-[#151924]">
+        <div className="h-full flex flex-col bg-[#151924] relative">
+            {/* CONFIRMATION OVERLAY */}
+            {showConfirmation && props.draftTrade && (
+                <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-[#1e222d] w-full max-w-sm rounded-xl border border-blue-500 shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-4 border-b border-gray-700 bg-[#151924]">
+                            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                                <span className={props.draftTrade.type === 'LONG' ? 'text-green-500' : 'text-red-500'}>
+                                    {props.draftTrade.type === 'LONG' ? 'BUY' : 'SELL'}
+                                </span> 
+                                CONFIRMATION
+                            </h3>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Entry Price</div>
+                                    <div className="text-white font-mono text-lg">{props.draftTrade.entryPrice.toFixed(2)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Lot Size</div>
+                                    <div className="text-white font-mono text-lg">{props.draftTrade.lotSize.toFixed(2)}</div>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-[#0b0e11] p-3 rounded border border-gray-700 space-y-2">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-400">Stop Loss</span>
+                                    <span className="text-red-400 font-mono">{props.draftTrade.stopLoss.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-400">Take Profit</span>
+                                    <span className="text-green-400 font-mono">{props.draftTrade.takeProfit.toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-center">
+                                <div className="bg-red-900/20 border border-red-500/30 p-2 rounded">
+                                    <div className="text-[9px] text-red-300 uppercase">Risk</div>
+                                    <div className="text-red-400 font-bold text-sm">-${riskAmount.toFixed(2)}</div>
+                                </div>
+                                <div className="bg-green-900/20 border border-green-500/30 p-2 rounded">
+                                    <div className="text-[9px] text-green-300 uppercase">Reward</div>
+                                    <div className="text-green-400 font-bold text-sm">+${rewardAmount.toFixed(2)}</div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-2">
+                                <button 
+                                    onClick={() => setShowConfirmation(false)} 
+                                    className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded font-bold transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={confirmOrder}
+                                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold shadow-lg shadow-blue-900/30 transition-all transform active:scale-95"
+                                >
+                                    CONFIRM
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="p-4 border-b border-[#2a2e39] flex justify-between items-center shrink-0">
                 <h2 className="font-bold text-white">Trading Desk</h2>
                 <div className="text-xs bg-blue-900/20 text-blue-400 px-2 py-0.5 rounded border border-blue-900/50">Simulated Execution</div>
@@ -102,9 +177,14 @@ export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
                             </div>
                         </div>
 
+                        <div className="text-[10px] text-blue-300 mb-4 bg-blue-900/20 p-2 rounded border border-blue-500/20 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                            Tip: You can drag Entry, SL, & TP lines on the chart.
+                        </div>
+
                         <div className="flex gap-3">
                             <button 
-                                onClick={props.onExecuteDraft} 
+                                onClick={handleExecuteClick} 
                                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded font-bold shadow-lg shadow-blue-900/20 transition-all"
                             >
                                 PLACE ORDER

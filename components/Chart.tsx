@@ -227,9 +227,10 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             const slY = candleSeriesRef.current.priceToCoordinate(prices.sl);
             const tpY = candleSeriesRef.current.priceToCoordinate(prices.tp);
 
-            if (entryY && Math.abs(y - entryY) < 10) return 'ENTRY';
-            if (slY && Math.abs(y - slY) < 10) return 'SL';
-            if (tpY && Math.abs(y - tpY) < 10) return 'TP';
+            // Allow 15px hit area
+            if (entryY && Math.abs(y - entryY) < 15) return 'ENTRY';
+            if (slY && Math.abs(y - slY) < 15) return 'SL';
+            if (tpY && Math.abs(y - tpY) < 15) return 'TP';
             return null;
         };
 
@@ -248,6 +249,14 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
                 isMouseDownRef.current = true;
                 draggingLineRef.current = hovered;
                 container.style.cursor = 'ns-resize';
+                
+                // Disable chart scroll while dragging line
+                if (chartRef.current) {
+                    chartRef.current.applyOptions({ 
+                        handleScroll: { vertTouchDrag: false, horzTouchDrag: false, mouseWheel: false, pressedMouseMove: false },
+                        handleScale: { axisPressedMouseMove: false, mouseWheel: false, pinch: false }
+                    });
+                }
             }
         };
 
@@ -280,6 +289,14 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             isMouseDownRef.current = false;
             draggingLineRef.current = null;
             container.style.cursor = 'default';
+            
+            // Re-enable chart interactions
+            if (chartRef.current) {
+                chartRef.current.applyOptions({ 
+                    handleScroll: { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+                    handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true }
+                });
+            }
         };
 
         container.addEventListener('mousedown', handleMouseDown);
@@ -291,7 +308,7 @@ export const ChartComponent: React.FC<ChartProps> = (props) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [props.draftTrade, props.onUpdateDraft]); // Re-bind when draft trade updates to get fresh values
+    }, [props.draftTrade, props.onUpdateDraft]); 
 
 
     const handleZoom = (delta: number) => {

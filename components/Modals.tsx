@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useRef, useEffect, ReactNode } from 'react';
+
+import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
 import { EntrySignal } from '../types';
 import { MODEL_INFO } from './panels/SetupsPanel';
 
@@ -260,7 +261,7 @@ interface ErrorBoundaryState {
     hasError: boolean;
 }
 
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     state: ErrorBoundaryState = {
         hasError: false
     };
@@ -281,6 +282,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded">Reload Page</button>
             </div>
         );
-        return this.props.children;
+        return this.props.children || null;
     }
 }
