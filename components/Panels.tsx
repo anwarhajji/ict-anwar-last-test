@@ -36,6 +36,7 @@ interface PanelProps {
     onReplay?: (e: EntrySignal) => void;
     onViewOnChart?: (e: EntrySignal) => void;
     currentAsset?: string;
+    resetAccount?: () => void;
 }
 
 export const Panels: React.FC<PanelProps> = (props) => {
@@ -68,6 +69,7 @@ export const Panels: React.FC<PanelProps> = (props) => {
                 slInput={props.slInput} setSlInput={props.setSlInput} 
                 tpInput={props.tpInput} setTpInput={props.setTpInput} 
                 autoTrade={props.autoTrade} setAutoTrade={props.setAutoTrade} 
+                resetAccount={props.resetAccount}
                 {...commonProps}
             />;
         case 'SETUPS': // Note: This case might be redundant if SETUPS is treated as a main tab, but keeping for compatibility if moved to sidebar.

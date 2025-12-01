@@ -25,7 +25,7 @@ const ToggleOption = ({ label, active, onClick }: { label: string, active: boole
     </div>
 );
 
-const SetupToggleRow = ({ label, active, onToggle, description }: { label: string, active: boolean, onToggle: () => void, description?: string }) => {
+const SetupToggleRow: React.FC<{ label: string, active: boolean, onToggle: () => void, description?: string }> = ({ label, active, onToggle, description }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (

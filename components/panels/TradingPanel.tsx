@@ -11,6 +11,7 @@ interface TradingPanelProps {
     slInput: string; setSlInput: (s: string) => void;
     tpInput: string; setTpInput: (s: string) => void;
     autoTrade: boolean; setAutoTrade: (b: boolean) => void;
+    resetAccount?: () => void;
 }
 
 export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
@@ -80,6 +81,17 @@ export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
                                 <div className="text-gray-500">Automatically take A+ setups</div>
                             </div>
                         </div>
+                    </div>
+                )}
+                
+                {props.resetAccount && (
+                    <div className="mt-8 border-t border-[#2a2e39] pt-4">
+                        <button 
+                            onClick={props.resetAccount}
+                            className="w-full text-xs text-gray-500 hover:text-red-400 underline"
+                        >
+                            Reset Paper Trading Account
+                        </button>
                     </div>
                 )}
             </div>

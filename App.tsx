@@ -104,14 +104,59 @@ const App: React.FC = () => {
         allowedGrades: { 'A++': true, 'A+': true, 'B': true }
     });
 
-    // Trading State
-    const [balance, setBalance] = useState(50000);
-    const [position, setPosition] = useState<TradeEntry | null>(null);
-    const [tradeHistory, setTradeHistory] = useState<TradeEntry[]>([]);
+    // Trading State - PERSISTENT
+    const [balance, setBalance] = useState(() => {
+        const saved = localStorage.getItem('ict-sim-balance');
+        return saved ? parseFloat(saved) : 50000;
+    });
+    const [position, setPosition] = useState<TradeEntry | null>(() => {
+        const saved = localStorage.getItem('ict-sim-position');
+        return saved ? JSON.parse(saved) : null;
+    });
+    const [tradeHistory, setTradeHistory] = useState<TradeEntry[]>(() => {
+        const saved = localStorage.getItem('ict-sim-history');
+        return saved ? JSON.parse(saved) : [];
+    });
+    
+    // Auto-Trading/Bot State
     const [autoTrade, setAutoTrade] = useState(false);
     const [slInput, setSlInput] = useState('');
     const [tpInput, setTpInput] = useState('');
     const [alert, setAlert] = useState<{msg: string, type: 'success'|'error'|'info'|'warning'} | null>(null);
+
+    // Persistence Effects
+    useEffect(() => { localStorage.setItem('ict-sim-balance', balance.toString()); }, [balance]);
+    useEffect(() => { 
+        if (position) localStorage.setItem('ict-sim-position', JSON.stringify(position)); 
+        else localStorage.removeItem('ict-sim-position');
+    }, [position]);
+    useEffect(() => { localStorage.setItem('ict-sim-history', JSON.stringify(tradeHistory)); }, [tradeHistory]);
+
+    // Reset Function
+    const resetAccount = () => {
+        if(confirm("Are you sure you want to reset your paper trading account? This action cannot be undone.")) {
+            setBalance(50000);
+            setPosition(null);
+            setTradeHistory([]);
+            localStorage.removeItem('ict-sim-balance');
+            localStorage.removeItem('ict-sim-position');
+            localStorage.removeItem('ict-sim-history');
+            setAlert({ msg: "Account Reset Successful", type: 'info' });
+        }
+    };
+
+    // --- ACTIONS ---
+    const enterTrade = (type: 'LONG'|'SHORT', price: number, sl: number, tp: number) => { 
+        setPosition({ time: Math.floor(Date.now() / 1000) as UTCTimestamp, type, price, stopLoss: sl, takeProfit: tp, result: 'OPEN', confluences: [], score: 0 }); 
+        setAlert({ msg: `${type} Trade Opened at ${price.toFixed(2)}`, type: 'info' });
+    };
+
+    const closeTrade = (pnl: number) => { 
+        if (!position) return; 
+        setBalance(prev => prev + pnl); 
+        setTradeHistory(prev => [{ ...position, result: pnl > 0 ? 'WIN' : 'LOSS', pnl }, ...prev]); 
+        setPosition(null); 
+    };
 
     // --- DATA FETCHING ---
     const fetchData = async () => {
@@ -182,6 +227,40 @@ const App: React.FC = () => {
     };
 
     useEffect(() => { fetchData(); const interval = setInterval(fetchData, 60000); return () => clearInterval(interval); }, [asset, timeframe, autoTrade, config, simulation]);
+
+    // --- POSITION MONITORING (TP/SL) ---
+    useEffect(() => {
+        if (!position || data.length === 0) return;
+        const currentCandle = data[data.length - 1];
+        const high = currentCandle.high;
+        const low = currentCandle.low;
+
+        let pnl = 0;
+        let closed = false;
+
+        if (position.type === 'LONG') {
+            if (low <= position.stopLoss) {
+                pnl = position.stopLoss - position.price; // Loss
+                closed = true;
+            } else if (high >= position.takeProfit) {
+                pnl = position.takeProfit - position.price; // Win
+                closed = true;
+            }
+        } else {
+            if (high >= position.stopLoss) {
+                 pnl = position.price - position.stopLoss; // Loss
+                 closed = true;
+            } else if (low <= position.takeProfit) {
+                pnl = position.price - position.takeProfit; // Win
+                closed = true;
+            }
+        }
+
+        if (closed) {
+             closeTrade(pnl); 
+             setAlert({ msg: `Trade Closed: ${pnl > 0 ? 'Win' : 'Loss'} ($${pnl.toFixed(2)})`, type: pnl > 0 ? 'success' : 'warning' });
+        }
+    }, [data, position]);
 
     // --- REPLAY LOGIC ---
     useEffect(() => {
@@ -277,16 +356,6 @@ const App: React.FC = () => {
          return fvgs.filter(f => (f.time as number) <= lastTime);
     }, [fvgs, replayMode.active, displayedData]);
 
-    // --- ACTIONS ---
-    const enterTrade = (type: 'LONG'|'SHORT', price: number, sl: number, tp: number) => { 
-        setPosition({ time: Math.floor(Date.now() / 1000) as UTCTimestamp, type, price, stopLoss: sl, takeProfit: tp, result: 'OPEN', confluences: [], score: 0 }); 
-    };
-    const closeTrade = (pnl: number) => { 
-        if (!position) return; 
-        setBalance(prev => prev + pnl); 
-        setTradeHistory(prev => [{ ...position, result: pnl > 0 ? 'WIN' : 'LOSS', pnl }, ...prev]); 
-        setPosition(null); 
-    };
     const handleDeepScan = () => {
         setIsScanning(true);
         setTimeout(() => { setIsScanning(false); setAlert({ msg: "Deep Scan Complete: Adjusted probabilities", type: "success" }); }, 2000);
@@ -590,6 +659,7 @@ const App: React.FC = () => {
                             onReplay={handleStartReplay}
                             onViewOnChart={handleViewOnChart}
                             currentAsset={asset}
+                            resetAccount={resetAccount}
                         />
                     </aside>
                 )}
