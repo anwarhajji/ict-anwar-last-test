@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { BacktestStats, EntrySignal, TradeEntry } from '../../types';
+import React, { useState, useMemo } from 'react';
+import { BacktestStats, EntrySignal, TradeEntry, ICTSetupType } from '../../types';
 
 interface StatsPanelProps {
     backtestStats: BacktestStats;
@@ -12,15 +12,107 @@ interface StatsPanelProps {
     onReplay?: (e: EntrySignal) => void;
 }
 
+type SortKey = 'time' | 'type' | 'price' | 'pnl' | 'result' | 'setup' | 'score';
+type SortDirection = 'asc' | 'desc';
+
+interface SortConfig {
+    key: SortKey;
+    direction: SortDirection;
+}
+
+interface FilterState {
+    type: 'ALL' | 'LONG' | 'SHORT';
+    result: 'ALL' | 'WIN' | 'LOSS' | 'OPEN';
+    setup: 'ALL' | string;
+}
+
+const SETUP_TYPES: string[] = ['2022 Model', 'Silver Bullet', 'Unicorn', 'OTE', 'Breaker', 'Standard FVG'];
+
 export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHistory, tradeHistory = [], setClickedEntry, onFocusEntry, focusedEntry, onReplay }) => {
     const [viewMode, setViewMode] = useState<'MANUAL' | 'ALGO'>('MANUAL');
+    
+    // Filter & Sort State
+    const [filters, setFilters] = useState<FilterState>({ type: 'ALL', result: 'ALL', setup: 'ALL' });
+    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'time', direction: 'desc' });
 
-    // Calculate Manual Stats
+    // Calculate Manual Stats (Aggregate)
     const manualWins = tradeHistory.filter(t => t.result === 'WIN').length;
     const manualLosses = tradeHistory.filter(t => t.result === 'LOSS').length;
     const manualTotal = manualWins + manualLosses;
     const manualWinRate = manualTotal > 0 ? (manualWins / manualTotal) * 100 : 0;
     const manualPnL = tradeHistory.reduce((acc, t) => acc + (t.pnl || 0), 0);
+
+    // --- SORTING HANDLER ---
+    const handleSort = (key: SortKey) => {
+        let direction: SortDirection = 'desc';
+        if (sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = 'asc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const SortIcon = ({ column }: { column: SortKey }) => {
+        if (sortConfig.key !== column) return <span className="text-gray-600 ml-1 opacity-50">⇅</span>;
+        return <span className="text-blue-400 ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+    };
+
+    // --- DATA PROCESSING (Filter & Sort) ---
+    const processedData = useMemo(() => {
+        let data: any[] = viewMode === 'MANUAL' ? [...tradeHistory] : [...recentHistory];
+
+        // 1. FILTER
+        if (filters.type !== 'ALL') {
+            data = data.filter(item => item.type === filters.type);
+        }
+        if (filters.result !== 'ALL') {
+            data = data.filter(item => {
+                const res = viewMode === 'MANUAL' ? (item as TradeEntry).result : (item as EntrySignal).backtestResult;
+                return res === filters.result;
+            });
+        }
+        if (filters.setup !== 'ALL' && viewMode === 'ALGO') {
+            data = data.filter(item => (item as EntrySignal).setupName === filters.setup);
+        }
+
+        // 2. SORT
+        data.sort((a, b) => {
+            let valA: any;
+            let valB: any;
+
+            switch (sortConfig.key) {
+                case 'time':
+                    valA = a.time; valB = b.time;
+                    break;
+                case 'type':
+                    valA = a.type; valB = b.type;
+                    break;
+                case 'price':
+                    valA = a.price; valB = b.price;
+                    break;
+                case 'pnl':
+                    valA = viewMode === 'MANUAL' ? (a as TradeEntry).pnl || 0 : (a as EntrySignal).backtestPnL || 0;
+                    valB = viewMode === 'MANUAL' ? (b as TradeEntry).pnl || 0 : (b as EntrySignal).backtestPnL || 0;
+                    break;
+                case 'result':
+                    valA = viewMode === 'MANUAL' ? (a as TradeEntry).result : (a as EntrySignal).backtestResult;
+                    valB = viewMode === 'MANUAL' ? (b as TradeEntry).result : (b as EntrySignal).backtestResult;
+                    break;
+                case 'setup':
+                     valA = (a as EntrySignal).setupName || '';
+                     valB = (b as EntrySignal).setupName || '';
+                     break;
+                default:
+                    return 0;
+            }
+
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return data;
+    }, [tradeHistory, recentHistory, viewMode, filters, sortConfig]);
+
 
     return (
         <div className="w-full h-full bg-[#0b0e11] overflow-y-auto custom-scrollbar flex flex-col">
@@ -77,14 +169,54 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                     </div>
                  </div>
 
+                 {/* FILTER BAR */}
+                 <div className="flex flex-wrap gap-4 mb-4 items-center">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Type:</span>
+                        <select 
+                            value={filters.type} 
+                            onChange={(e) => setFilters({...filters, type: e.target.value as any})}
+                            className="bg-[#151924] text-white text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All</option>
+                            <option value="LONG">Long</option>
+                            <option value="SHORT">Short</option>
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Result:</span>
+                        <select 
+                            value={filters.result} 
+                            onChange={(e) => setFilters({...filters, result: e.target.value as any})}
+                            className="bg-[#151924] text-white text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All</option>
+                            <option value="WIN">Win</option>
+                            <option value="LOSS">Loss</option>
+                            {viewMode === 'MANUAL' && <option value="OPEN">Open</option>}
+                        </select>
+                    </div>
+                    {viewMode === 'ALGO' && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-500 uppercase">Setup:</span>
+                            <select 
+                                value={filters.setup} 
+                                onChange={(e) => setFilters({...filters, setup: e.target.value as any})}
+                                className="bg-[#151924] text-white text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                            >
+                                <option value="ALL">All Models</option>
+                                {SETUP_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    <div className="flex-1"></div>
+                    <div className="text-xs text-gray-500 italic">
+                        Showing {processedData.length} records
+                    </div>
+                 </div>
+
                  {/* TABLE CONTAINER */}
                  <div className="flex-1 min-h-0 bg-[#151924] rounded-xl border border-[#2a2e39] shadow-lg flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-[#2a2e39] bg-[#1e222d] shrink-0">
-                        <h3 className="font-bold text-white flex items-center gap-2">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                             {viewMode === 'MANUAL' ? 'Paper Trading Log' : 'Algorithmic Signal Log'}
-                        </h3>
-                    </div>
                     
                     <div className="flex-1 overflow-auto custom-scrollbar relative">
                         {viewMode === 'MANUAL' ? (
@@ -92,17 +224,27 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                             <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead className="sticky top-0 z-30">
                                     <tr className="bg-[#1e222d] text-xs text-gray-400 uppercase border-b border-[#2a2e39] shadow-sm">
-                                        <th className="p-4 font-bold whitespace-nowrap">Date & Time</th>
-                                        <th className="p-4 font-bold">Type</th>
+                                        <th className="p-4 font-bold whitespace-nowrap cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('time')}>
+                                            Date & Time <SortIcon column="time" />
+                                        </th>
+                                        <th className="p-4 font-bold cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('type')}>
+                                            Type <SortIcon column="type" />
+                                        </th>
                                         <th className="p-4 font-bold font-mono">Lot Size</th>
-                                        <th className="p-4 font-bold font-mono">Entry Price</th>
+                                        <th className="p-4 font-bold font-mono cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('price')}>
+                                            Entry Price <SortIcon column="price" />
+                                        </th>
                                         <th className="p-4 font-bold font-mono">Stop / TP</th>
-                                        <th className="p-4 font-bold text-center">Result</th>
-                                        <th className="p-4 font-bold font-mono text-right">PnL</th>
+                                        <th className="p-4 font-bold text-center cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('result')}>
+                                            Result <SortIcon column="result" />
+                                        </th>
+                                        <th className="p-4 font-bold font-mono text-right cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('pnl')}>
+                                            PnL <SortIcon column="pnl" />
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-sm divide-y divide-[#2a2e39]">
-                                    {tradeHistory.slice().reverse().map((trade, i) => {
+                                    {processedData.map((trade: TradeEntry) => {
                                         const isWin = trade.result === 'WIN';
                                         const isLoss = trade.result === 'LOSS';
                                         const pnlColor = isWin ? 'text-green-400' : isLoss ? 'text-red-400' : 'text-gray-400';
@@ -118,7 +260,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                                         {trade.type}
                                                     </span>
                                                 </td>
-                                                <td className="p-4 font-mono text-xs text-gray-300">{trade.lotSize.toFixed(2)}</td>
+                                                <td className="p-4 font-mono text-xs text-gray-300">{(trade.lotSize || 0).toFixed(2)}</td>
                                                 <td className="p-4 font-mono text-xs text-white">{trade.price.toFixed(2)}</td>
                                                 <td className="p-4 font-mono text-xs text-gray-400">
                                                     <div className="flex flex-col">
@@ -137,11 +279,10 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                             </tr>
                                         );
                                     })}
-                                    {tradeHistory.length === 0 && (
+                                    {processedData.length === 0 && (
                                         <tr>
                                             <td colSpan={7} className="p-12 text-center text-gray-500">
-                                                <div className="text-lg mb-2">No paper trades recorded.</div>
-                                                <div className="text-sm">Go to the "Trade" tab to execute simulated positions.</div>
+                                                <div className="text-lg mb-2">No trades match your filters.</div>
                                             </td>
                                         </tr>
                                     )}
@@ -153,18 +294,30 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                 <thead className="sticky top-0 z-30">
                                     <tr className="bg-[#1e222d] text-xs text-gray-400 uppercase border-b border-[#2a2e39] shadow-sm">
                                         <th className="p-4 font-bold text-center sticky left-0 bg-[#1e222d] border-r border-[#2a2e39] shadow-[4px_0_8px_rgba(0,0,0,0.2)] w-28 z-40">Actions</th>
-                                        <th className="p-4 font-bold whitespace-nowrap">Date & Time</th>
-                                        <th className="p-4 font-bold">Type</th>
-                                        <th className="p-4 font-bold">Setup</th>
-                                        <th className="p-4 font-bold font-mono">Entry Price</th>
+                                        <th className="p-4 font-bold whitespace-nowrap cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('time')}>
+                                            Date & Time <SortIcon column="time" />
+                                        </th>
+                                        <th className="p-4 font-bold cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('type')}>
+                                            Type <SortIcon column="type" />
+                                        </th>
+                                        <th className="p-4 font-bold cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('setup')}>
+                                            Setup <SortIcon column="setup" />
+                                        </th>
+                                        <th className="p-4 font-bold font-mono cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('price')}>
+                                            Entry Price <SortIcon column="price" />
+                                        </th>
                                         <th className="p-4 font-bold font-mono">Stop Loss</th>
                                         <th className="p-4 font-bold font-mono">Take Profit</th>
-                                        <th className="p-4 font-bold text-center">Result</th>
-                                        <th className="p-4 font-bold font-mono text-right">PnL</th>
+                                        <th className="p-4 font-bold text-center cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('result')}>
+                                            Result <SortIcon column="result" />
+                                        </th>
+                                        <th className="p-4 font-bold font-mono text-right cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('pnl')}>
+                                            PnL <SortIcon column="pnl" />
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-sm divide-y divide-[#2a2e39]">
-                                    {recentHistory.slice().reverse().map((entry, i) => {
+                                    {processedData.map((entry: EntrySignal, i) => {
                                         const isFocused = focusedEntry && entry.time === focusedEntry.time;
                                         const isWin = entry.backtestResult === 'WIN';
                                         const isLoss = entry.backtestResult === 'LOSS';
@@ -226,10 +379,10 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                             </tr>
                                         );
                                     })}
-                                    {recentHistory.length === 0 && (
+                                    {processedData.length === 0 && (
                                         <tr>
                                             <td colSpan={9} className="p-12 text-center text-gray-500">
-                                                <div className="text-lg mb-2">No signals generated.</div>
+                                                <div className="text-lg mb-2">No signals match your filters.</div>
                                             </td>
                                         </tr>
                                     )}

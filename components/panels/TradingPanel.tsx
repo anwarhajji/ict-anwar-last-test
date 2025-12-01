@@ -225,9 +225,10 @@ export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
                     
                     <div className="space-y-3">
                         {props.positions.map((pos) => {
+                             const lotSize = pos.lotSize || 1;
                              const pnl = pos.type === 'LONG' 
-                                ? (currentPrice - pos.price) * pos.lotSize 
-                                : (pos.price - currentPrice) * pos.lotSize;
+                                ? (currentPrice - pos.price) * lotSize 
+                                : (pos.price - currentPrice) * lotSize;
                                 
                              return (
                                 <div key={pos.id} className="bg-[#0b0e11] p-3 rounded border border-[#2a2e39] relative overflow-hidden group">
@@ -236,7 +237,7 @@ export const TradingPanel: React.FC<TradingPanelProps> = (props) => {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-sm font-bold ${pos.type === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>{pos.type}</span>
-                                                <span className="text-xs text-gray-500 font-mono">Lot: {pos.lotSize.toFixed(2)}</span>
+                                                <span className="text-xs text-gray-500 font-mono">Lot: {(pos.lotSize || 0).toFixed(2)}</span>
                                             </div>
                                             <div className="text-xs text-gray-400 font-mono mt-0.5">@ {pos.price.toFixed(2)}</div>
                                         </div>

@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect, ReactNode, Component } from 'react';
 import { EntrySignal } from '../types';
 import { MODEL_INFO } from './panels/SetupsPanel';
