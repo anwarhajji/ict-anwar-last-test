@@ -9,6 +9,7 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+    const [showEmails, setShowEmails] = useState(true);
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -129,6 +130,13 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                 className="bg-transparent border-none outline-none text-white w-48"
                             />
                         </div>
+                        <button 
+                            onClick={() => setShowEmails(!showEmails)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${showEmails ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-[#151924] border-[#2a2e39] text-gray-400'}`}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            {showEmails ? 'Hide Emails' : 'Show Emails'}
+                        </button>
                         <button className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors">
                             Export CSV
                         </button>
@@ -165,6 +173,7 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                             <thead>
                                 <tr className="bg-[#0b0e11] text-gray-400 text-sm uppercase tracking-wider">
                                     <th className="p-4 font-medium">User</th>
+                                    {showEmails && <th className="p-4 font-medium">Email</th>}
                                     <th className="p-4 font-medium">Role</th>
                                     <th className="p-4 font-medium">Plan</th>
                                     <th className="p-4 font-medium">Joined</th>
@@ -180,12 +189,14 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                                 <div className="w-10 h-10 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-400 font-bold border border-blue-500/30">
                                                     {(u.displayName || u.email || '?').charAt(0).toUpperCase()}
                                                 </div>
-                                                <div>
-                                                    <div className="font-bold text-white">{u.displayName || 'Unknown User'}</div>
-                                                    <div className="text-sm text-gray-500">{u.email || 'No email'}</div>
-                                                </div>
+                                                <div className="font-bold text-white">{u.displayName || 'Unknown User'}</div>
                                             </div>
                                         </td>
+                                        {showEmails && (
+                                            <td className="p-4 text-sm text-gray-400">
+                                                {u.email || 'No email'}
+                                            </td>
+                                        )}
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded text-xs font-bold ${
                                                 u.role === 'SUPER_ADMIN' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' :
@@ -234,7 +245,21 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                         <div className="p-6 border-b border-[#2a2e39] flex justify-between items-center bg-[#0b0e11]">
                             <div>
                                 <h3 className="text-xl font-bold text-white">Manage Access</h3>
-                                <p className="text-sm text-gray-400">{selectedUser.displayName} ({selectedUser.email})</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-sm text-gray-400">{selectedUser.displayName} ({selectedUser.email})</p>
+                                    <button 
+                                        onClick={() => {
+                                            if (selectedUser.email) {
+                                                navigator.clipboard.writeText(selectedUser.email);
+                                                // Optional: show a small toast or change icon
+                                            }
+                                        }}
+                                        className="text-gray-500 hover:text-blue-400 transition-colors"
+                                        title="Copy Email"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                </div>
                             </div>
                             <button onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-white">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
