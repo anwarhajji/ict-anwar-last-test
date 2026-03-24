@@ -1,0 +1,257 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the SaaS Trading platform",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "The user's role"
+        },
+        "plan_type": {
+          "type": "string",
+          "enum": ["free", "pro"],
+          "description": "The user's subscription plan"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the user account was created"
+        }
+      },
+      "required": ["email", "role", "plan_type", "created_at"]
+    },
+    "ApiConnection": {
+      "title": "ApiConnection",
+      "description": "A user's connection to an exchange (e.g., Binance)",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user who owns this connection"
+        },
+        "exchange": {
+          "type": "string",
+          "description": "The exchange name (e.g., 'binance')"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "The public API key"
+        },
+        "api_secret": {
+          "type": "string",
+          "description": "The encrypted API secret"
+        },
+        "is_valid": {
+          "type": "boolean",
+          "description": "Whether the connection is currently valid"
+        }
+      },
+      "required": ["user_id", "exchange", "api_key", "api_secret", "is_valid"]
+    },
+    "TelegramConfig": {
+      "title": "TelegramConfig",
+      "description": "A user's Telegram bot configuration",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user who owns this config"
+        },
+        "bot_token": {
+          "type": "string",
+          "description": "The Telegram bot token"
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "The Telegram chat ID"
+        },
+        "is_active": {
+          "type": "boolean",
+          "description": "Whether the Telegram integration is active"
+        }
+      },
+      "required": ["user_id", "bot_token", "chat_id", "is_active"]
+    },
+    "Bot": {
+      "title": "Bot",
+      "description": "A trading bot configuration",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user who owns this bot"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the bot"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["live", "demo", "paused"],
+          "description": "The current status of the bot"
+        },
+        "config": {
+          "type": "string",
+          "description": "JSON stringified configuration for the bot's strategy"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the bot was created"
+        }
+      },
+      "required": ["user_id", "name", "status", "config", "created_at"]
+    },
+    "Trade": {
+      "title": "Trade",
+      "description": "A completed trade",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user who executed the trade"
+        },
+        "bot_id": {
+          "type": "string",
+          "description": "The ID of the bot that executed the trade (if applicable)"
+        },
+        "symbol": {
+          "type": "string",
+          "description": "The trading pair symbol (e.g., 'BTCUSDT')"
+        },
+        "side": {
+          "type": "string",
+          "enum": ["buy", "sell"],
+          "description": "The side of the trade"
+        },
+        "entry_price": {
+          "type": "number",
+          "description": "The entry price of the trade"
+        },
+        "exit_price": {
+          "type": "number",
+          "description": "The exit price of the trade"
+        },
+        "pnl": {
+          "type": "number",
+          "description": "The profit and loss of the trade"
+        },
+        "executed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the trade was executed"
+        }
+      },
+      "required": ["user_id", "symbol", "side", "entry_price", "exit_price", "pnl", "executed_at"]
+    },
+    "BotStatistic": {
+      "title": "BotStatistic",
+      "description": "Aggregated statistics for a bot",
+      "type": "object",
+      "properties": {
+        "bot_id": {
+          "type": "string",
+          "description": "The ID of the bot"
+        },
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user who owns the bot"
+        },
+        "win_rate": {
+          "type": "number",
+          "description": "The win rate of the bot (0-100)"
+        },
+        "total_pnl": {
+          "type": "number",
+          "description": "The total profit and loss of the bot"
+        },
+        "total_trades": {
+          "type": "number",
+          "description": "The total number of trades executed by the bot"
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the statistics were last updated"
+        }
+      },
+      "required": ["bot_id", "user_id", "win_rate", "total_pnl", "total_trades", "last_updated"]
+    },
+    "DailyTask": {
+      "title": "DailyTask",
+      "description": "A daily task or checklist item",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the user"
+        },
+        "date": {
+          "type": "string",
+          "description": "The date of the task (YYYY-MM-DD)"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the task is completed"
+        },
+        "task_name": {
+          "type": "string",
+          "description": "The name of the task"
+        }
+      },
+      "required": ["user_id", "date", "completed", "task_name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles and subscription plans"
+    },
+    "/api_connections/{connectionId}": {
+      "schema": {
+        "$ref": "#/entities/ApiConnection"
+      },
+      "description": "Stores encrypted API connections for exchanges"
+    },
+    "/telegram_configs/{configId}": {
+      "schema": {
+        "$ref": "#/entities/TelegramConfig"
+      },
+      "description": "Stores Telegram bot configurations"
+    },
+    "/bots/{botId}": {
+      "schema": {
+        "$ref": "#/entities/Bot"
+      },
+      "description": "Stores trading bot configurations"
+    },
+    "/trades/{tradeId}": {
+      "schema": {
+        "$ref": "#/entities/Trade"
+      },
+      "description": "Stores the history of executed trades"
+    },
+    "/bot_stats/{botId}": {
+      "schema": {
+        "$ref": "#/entities/BotStatistic"
+      },
+      "description": "Stores aggregated statistics for bots"
+    },
+    "/tasks/{taskId}": {
+      "schema": {
+        "$ref": "#/entities/DailyTask"
+      },
+      "description": "Stores daily tasks and checklists"
+    }
+  }
+}

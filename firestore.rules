@@ -1,0 +1,146 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+       return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+       return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+       return isAuthenticated() && request.auth.uid == resource.data.user_id;
+    }
+    
+    function uidUnchanged() {
+       return !('user_id' in request.resource.data) ||
+         request.resource.data.user_id == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+       return !('user_id' in request.resource.data) ||
+         request.resource.data.user_id == resource.data.user_id;
+    }
+    
+    function hasRequiredFields(fields) {
+       return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function validStringLength(field, minLen, maxLen) {
+       return request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+       return email is string &&
+         email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (request.auth.token.email == "anwar.hajji@gmail.com") ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'ADMIN', 'SUPER_ADMIN', 'OWNER'])
+        );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'plan_type', 'created_at']) &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'user'] &&
+             data.plan_type in ['free', 'pro'] &&
+             data.created_at is string;
+    }
+
+    function isValidApiConnection(data) {
+      return data.keys().hasAll(['user_id', 'exchange', 'api_key', 'api_secret', 'is_valid']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.exchange is string && data.exchange.size() > 0 && data.exchange.size() < 50 &&
+             data.api_key is string && data.api_key.size() > 0 && data.api_key.size() < 200 &&
+             data.api_secret is string && data.api_secret.size() > 0 && data.api_secret.size() < 500 &&
+             data.is_valid is bool;
+    }
+
+    function isValidTelegramConfig(data) {
+      return data.keys().hasAll(['user_id', 'bot_token', 'chat_id', 'is_active']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.bot_token is string && data.bot_token.size() > 0 && data.bot_token.size() < 200 &&
+             data.chat_id is string && data.chat_id.size() > 0 && data.chat_id.size() < 100 &&
+             data.is_active is bool;
+    }
+
+    function isValidBot(data) {
+      return data.keys().hasAll(['user_id', 'name', 'status', 'config', 'created_at']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.status in ['live', 'demo', 'paused'] &&
+             data.config is string && data.config.size() < 10000 &&
+             data.created_at is string;
+    }
+
+    function isValidTrade(data) {
+      return data.keys().hasAll(['user_id', 'symbol', 'side', 'entry_price', 'exit_price', 'pnl', 'executed_at']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             (!('bot_id' in data) || (data.bot_id is string && data.bot_id.size() < 100)) &&
+             data.symbol is string && data.symbol.size() > 0 && data.symbol.size() < 20 &&
+             data.side in ['buy', 'sell'] &&
+             data.entry_price is number &&
+             data.exit_price is number &&
+             data.pnl is number &&
+             data.executed_at is string;
+    }
+
+    function isValidBotStatistic(data) {
+      return data.keys().hasAll(['bot_id', 'user_id', 'win_rate', 'total_pnl', 'total_trades', 'last_updated']) &&
+             data.bot_id is string && data.bot_id.size() > 0 &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.win_rate is number &&
+             data.total_pnl is number &&
+             data.total_trades is number &&
+             data.last_updated is string;
+    }
+
+    function isValidDailyTask(data) {
+      return data.keys().hasAll(['user_id', 'date', 'completed', 'task_name']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.date is string && data.date.size() > 0 && data.date.size() < 20 &&
+             data.completed is bool &&
+             data.task_name is string && data.task_name.size() > 0 && data.task_name.size() < 200;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if isAdmin();
+      
+      match /trades/{tradeId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /data/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
