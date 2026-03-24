@@ -217,6 +217,7 @@ export interface Strategy {
     description: string;
     versions: StrategyVersion[];
     createdAt: string;
+    allowedTimeframes?: string[];
 }
 
 export interface StrategyVersion {

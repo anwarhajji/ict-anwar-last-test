@@ -20,31 +20,37 @@ const DEFAULT_STRATEGIES = [
     { 
         id: 'strat_builtin_1', 
         name: 'ICT Silver Bullet', 
+        allowedTimeframes: ['5m', '15m'],
         code: `function onTick(market, position) {\n  // Silver Bullet Logic: Time-based FVG entry\n  // Simplified for demo: entry on RSI oversold/overbought\n  if (market.rsi < 30 && !position) {\n    return { action: "BUY", size: 1.0 };\n  }\n  if (market.rsi > 70 && position && position.type === "BUY") {\n    return { action: "CLOSE" };\n  }\n  if (market.rsi > 70 && !position) {\n    return { action: "SELL", size: 1.0 };\n  }\n  if (market.rsi < 30 && position && position.type === "SELL") {\n    return { action: "CLOSE" };\n  }\n  return null;\n}` 
     },
     { 
         id: 'strat_builtin_2', 
         name: 'London Breakout v2.0', 
+        allowedTimeframes: ['15m', '1H'],
         code: `function onTick(market, position) {\n  // London Breakout: Entry on price breaking EMA20 with volume\n  if (market.price > market.ema20 && market.volume > 500 && !position) {\n    return { action: "BUY", size: 1.0 };\n  }\n  if (market.price < market.ema20 && position && position.type === "BUY") {\n    return { action: "CLOSE" };\n  }\n  return null;\n}` 
     },
     { 
         id: 'strat_builtin_3', 
         name: 'NQ FVG Scalper', 
+        allowedTimeframes: ['1m', '5m'],
         code: `function onTick(market, position) {\n  // Scalper: Quick entries on ATR expansion\n  if (market.atr > 0.0018 && !position) {\n    return { action: "BUY", size: 2.0 };\n  }\n  if (position && (market.price > position.entryPrice + 0.0010 || market.price < position.entryPrice - 0.0005)) {\n    return { action: "CLOSE" };\n  }\n  return null;\n}` 
     },
     {
         id: 'strat_builtin_4',
         name: '2022 Mentorship Model',
+        allowedTimeframes: ['5m', '15m', '1H'],
         code: `function onTick(market, position) {\n  // 2022 Model: MSS + FVG entry\n  // Simplified: Entry on RSI reversal + EMA cross\n  if (market.rsi < 35 && market.price > market.ema20 && !position) {\n    return { action: "BUY", size: 1.0 };\n  }\n  if (market.rsi > 65 && market.price < market.ema20 && !position) {\n    return { action: "SELL", size: 1.0 };\n  }\n  if (position && ((position.type === "BUY" && market.rsi > 75) || (position.type === "SELL" && market.rsi < 25))) {\n    return { action: "CLOSE" };\n  }\n  return null;\n}`
     },
     {
         id: 'strat_builtin_5',
         name: 'ICT Unicorn',
+        allowedTimeframes: ['1m', '5m', '15m'],
         code: `function onTick(market, position) {\n  // Unicorn: Breaker + FVG\n  if (market.volume > 800 && market.rsi > 50 && !position) {\n    return { action: "BUY", size: 1.5 };\n  }\n  if (position && market.volume < 200) {\n    return { action: "CLOSE" };\n  }\n  return null;\n}`
     },
     { 
         id: 'strat_custom_1', 
         name: 'My Custom EMA', 
+        allowedTimeframes: ['1H', '4H'],
         code: 'function onTick(market, position) {\n  // Exemple de code JavaScript\n  if (market.price > market.ema20 && !position) {\n    return { action: "BUY", size: 1.0 };\n  }\n  if (market.price < market.ema20 && position) {\n    return { action: "CLOSE" };\n  }\n  return null;\n}' 
     }
 ];
@@ -113,7 +119,7 @@ export const BotsPanel: React.FC<BotsPanelProps> = ({ userProfile }) => {
     const [logs, setLogs] = useState<BotLog[]>([]);
     
     const [customStrategies, setCustomStrategies] = useState(DEFAULT_STRATEGIES);
-    const [newStrategy, setNewStrategy] = useState({ name: '', code: 'function onTick(market, position) {\n  // Écris ta logique JavaScript ici\n  \n  return null;\n}' });
+    const [newStrategy, setNewStrategy] = useState({ name: '', code: 'function onTick(market, position) {\n  // Écris ta logique JavaScript ici\n  \n  return null;\n}', allowedTimeframes: ['15m', '1H'] });
 
     const [bots, setBots] = useState<Bot[]>(DEFAULT_BOTS);
 
@@ -225,21 +231,30 @@ export const BotsPanel: React.FC<BotsPanelProps> = ({ userProfile }) => {
 
         if (editingStrategyId) {
             setCustomStrategies(customStrategies.map(s => 
-                s.id === editingStrategyId ? { ...s, name: newStrategy.name, code: newStrategy.code } : s
+                s.id === editingStrategyId ? { ...s, name: newStrategy.name, code: newStrategy.code, allowedTimeframes: newStrategy.allowedTimeframes } : s
             ));
         } else {
-            setCustomStrategies([...customStrategies, { id: `strat_${Date.now()}`, name: newStrategy.name, code: newStrategy.code }]);
+            setCustomStrategies([...customStrategies, { 
+                id: `strat_${Date.now()}`, 
+                name: newStrategy.name, 
+                code: newStrategy.code,
+                allowedTimeframes: newStrategy.allowedTimeframes
+            }]);
         }
         
         setShowStrategyModal(false);
         setEditingStrategyId(null);
-        setNewStrategy({ name: '', code: 'function onTick(market, position) {\n  // Écris ta logique JavaScript ici\n  \n  return null;\n}' });
+        setNewStrategy({ name: '', code: 'function onTick(market, position) {\n  // Écris ta logique JavaScript ici\n  \n  return null;\n}', allowedTimeframes: ['15m', '1H'] });
     };
 
     const handleEditStrategy = (id: string) => {
         const strat = customStrategies.find(s => s.id === id);
         if (strat) {
-            setNewStrategy({ name: strat.name, code: strat.code });
+            setNewStrategy({ 
+                name: strat.name, 
+                code: strat.code,
+                allowedTimeframes: strat.allowedTimeframes || ['15m', '1H']
+            });
             setEditingStrategyId(id);
             setShowStrategyModal(true);
         }
@@ -691,7 +706,15 @@ function onTick(market, position) {
                                     <label className="block text-sm font-bold text-gray-400 mb-1">Strategy</label>
                                     <select 
                                         value={newBotForm.strategy}
-                                        onChange={e => setNewBotForm({...newBotForm, strategy: e.target.value})}
+                                        onChange={e => {
+                                            const stratName = e.target.value;
+                                            const strat = customStrategies.find(s => s.name === stratName);
+                                            setNewBotForm({
+                                                ...newBotForm, 
+                                                strategy: stratName,
+                                                allowedTimeframes: strat?.allowedTimeframes || ['15m', '1H']
+                                            });
+                                        }}
                                         className="w-full bg-[#0b0e11] text-white p-3 rounded-lg border border-[#2a2e39] focus:border-blue-500 outline-none"
                                     >
                                         <option value="">Select a strategy...</option>
@@ -820,16 +843,46 @@ function onTick(market, position) {
 
                                 {/* Main Editor Area */}
                                 <form onSubmit={handleSaveStrategy} className="flex flex-col flex-1 overflow-hidden">
-                                    <div className="p-4 border-b border-[#2a2e39] shrink-0 bg-[#151924]">
-                                        <label className="block text-sm font-bold text-gray-400 mb-1">Strategy Name</label>
-                                        <input 
-                                            type="text" 
-                                            required
-                                            value={newStrategy.name}
-                                            onChange={e => setNewStrategy({...newStrategy, name: e.target.value})}
-                                            className="w-full max-w-md bg-[#0b0e11] text-white p-2 rounded-lg border border-[#2a2e39] focus:border-blue-500 outline-none"
-                                            placeholder="e.g. My Super Trend Follower"
-                                        />
+                                    <div className="p-4 border-b border-[#2a2e39] shrink-0 bg-[#151924] flex gap-6">
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-bold text-gray-400 mb-1">Strategy Name</label>
+                                            <input 
+                                                type="text" 
+                                                required
+                                                value={newStrategy.name}
+                                                onChange={e => setNewStrategy({...newStrategy, name: e.target.value})}
+                                                className="w-full bg-[#0b0e11] text-white p-2 rounded-lg border border-[#2a2e39] focus:border-blue-500 outline-none"
+                                                placeholder="e.g. My Super Trend Follower"
+                                            />
+                                        </div>
+                                        <div className="w-1/2">
+                                            <label className="block text-sm font-bold text-gray-400 mb-1">Allowed Timeframes</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {['1m', '5m', '15m', '1H', '4H', '1D'].map(tf => {
+                                                    const isActive = (newStrategy.allowedTimeframes || []).includes(tf);
+                                                    return (
+                                                        <button
+                                                            key={tf}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const currentTfs = newStrategy.allowedTimeframes || [];
+                                                                const newTfs = isActive 
+                                                                    ? currentTfs.filter(t => t !== tf)
+                                                                    : [...currentTfs, tf];
+                                                                setNewStrategy({...newStrategy, allowedTimeframes: newTfs});
+                                                            }}
+                                                            className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors ${
+                                                                isActive 
+                                                                ? 'bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30' 
+                                                                : 'bg-[#0b0e11] text-gray-500 border-[#2a2e39] hover:text-gray-300'
+                                                            }`}
+                                                        >
+                                                            {tf}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="flex-1 p-4 flex flex-col bg-[#0b0e11]">
                                         <div className="flex justify-between items-end mb-2">
