@@ -897,6 +897,7 @@ const App: React.FC = () => {
                                 backtestStats={backtestStats} 
                                 positions={positions} 
                                 tradeHistory={tradeHistory}
+                                userProfile={userProfile}
                                 currentAsset={asset}
                                 onAssetChange={setAsset}
                             />
@@ -979,11 +980,23 @@ const App: React.FC = () => {
                                 <BacktestPanel onStartReplay={handleStartReplay} />
                             )
                         ) : activeTab === 'PROFILE' ? (
-                            <ProfilePanel user={user} userProfile={userProfile} onLogout={logout} />
+                            <ProfilePanel 
+                                user={user} 
+                                userProfile={userProfile} 
+                                onLogout={logout} 
+                                onUpdateProfile={async (updated) => {
+                                    if (!user) return;
+                                    const { doc, setDoc } = await import('firebase/firestore');
+                                    const { db } = await import('./firebase');
+                                    const userRef = doc(db, `users/${user.uid}`);
+                                    await setDoc(userRef, updated, { merge: true });
+                                    setUserProfile(updated);
+                                }}
+                            />
                         ) : activeTab === 'ADMIN' ? (
                             (userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN') ? <AdminPanel userProfile={userProfile} /> : <FeatureLocked featureName="Administration" />
                         ) : activeTab === 'BOTS' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.bots === false) ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel />
+                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.bots === false) ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel userProfile={userProfile} />
                         ) : activeTab === 'RISK' ? (
                             <RiskPanel />
                         ) : (

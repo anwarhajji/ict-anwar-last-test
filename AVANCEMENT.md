@@ -1,33 +1,53 @@
-# FILE: AVANCEMENT.md
+# Suivi de Projet - SaaS Trading Journal & Bot Manager
 
-# SUIVI PROJET
+## Status Global : 🟡 (En développement)
 
-**Status Global** : ✅ MVP Terminé (Phase 4)
+| Milestone | Status | Date |
+|-----------|--------|------|
+| Setup Firebase & Auth | ✅ | 24/03/2026 |
+| Module Journal & Stats | ✅ | 24/03/2026 |
+| Module News & Tasks | ✅ | 24/03/2026 |
+| Module Bots & Stratégies | ✅ | 24/03/2026 |
+| Sync Broker API | 🔴 | À venir |
+| Backtesting Replay | 🔴 | À venir |
 
-## Table des Milestones
-| Milestone | Status | Date cible |
-|---|---|---|
-| M1: Fondations & Auth | ✅ Fait | J0 |
-| M2: Paper Trading & Chart | ✅ Fait | J+1 |
-| M3: Journal & Tasks | ✅ Fait | J+2 |
-| M4: Broker Sync (CSV) | ✅ Fait | J+3 |
-| M5: Backtesting & Admin | ✅ Fait | J+4 |
-| M6: Bots & Guardrails | ✅ Fait | J+5 |
+## Checklist Détaillée
 
-## Checklist Détaillée (Maintenance & Ops)
-- [x] Correction des bugs d'affichage `AdminPanel` (propriétés indéfinies).
-- [x] Mise à jour des règles Firestore pour les rôles `SUPER_ADMIN` et `OWNER`.
-- [x] Création du guide de déploiement local/dédié (`GUIDE_LOCAL.md`).
-- [x] Exposition des variables Firebase dans `.env.example`.
-- [x] Support de l'ID de base de données dynamique dans `firebase.ts`.
+### 🔐 Auth & SaaS
+- [x] Login Google Firebase.
+- [x] Rôles (Admin, Member).
+- [x] Profil utilisateur et features activées.
 
-## Journal Quotidien
-- **Aujourd'hui** : Finalisation de la Phase 4 (Bots & Guardrails). Le MVP est désormais complet. Ajout des filtres et explications d'impact sur le calendrier économique (News). Ajustement des permissions pour le rôle OWNER (accès Admin et bypass des feature locks). Correction critique de l'AdminPanel pour la visibilité des utilisateurs et ajout de la documentation pour le déploiement hors AI Studio.
-- **Blocages** : Aucun.
-- **Next** : Tests de charge sur l'import CSV et amélioration de l'UX du journal (édition en ligne).
+### 📊 Journal & Analytics
+- [x] Import manuel CSV.
+- [x] Liste des trades et éditeur de notes.
+- [x] KPIs (PnL, Win Rate, Profit Factor).
+- [x] Equity Curve (Graphique de capital).
 
-## Bugs & Dette Technique
-- *Bug* : Le graphique ne se redimensionne pas toujours parfaitement lors du toggle du menu mobile.
-- *Tech Debt* : Le state `tradeHistory` est géré dans `App.tsx`, il faudra passer sur un Context React ou Redux/Zustand pour une meilleure scalabilité.
-- ✅ *Bug Fix* : Correction de l'affichage des utilisateurs dans l'AdminPanel (gestion des propriétés indéfinies et mise à jour des règles Firestore pour les rôles `SUPER_ADMIN` et `OWNER`).
-- ✅ *New* : Ajout d'un guide de test local et serveur dédié (`GUIDE_LOCAL.md`) et mise à jour de `.env.example` avec les variables Firebase.
+### 🤖 Bots & Stratégies
+- [x] Liste des bots (Demo/Simulé).
+- [x] Création de bots avec stratégies prédéfinies.
+- [x] Éditeur de code JavaScript pour stratégies.
+- [x] Moteur de simulation temps réel (simulé).
+- [x] Persistance des bots et stratégies dans Firestore.
+- [x] **Bot Suivi :** Dashboard de suivi de la performance globale des bots.
+- [x] **Limites & Balance :** Gestion du capital de départ et limite de 1 à 5 bots par utilisateur.
+
+### 📰 News & Tasks
+- [x] Calendrier économique (News à fort impact).
+- [x] Checklists quotidiennes (Tasks).
+- [x] Suivi de la discipline journalière.
+
+## Journal Quotidien (24/03/2026)
+- **Fait :**
+    - Création du module `BotsPanel` avec éditeur de stratégies JavaScript.
+    - Ajout de 5 stratégies intégrées (Silver Bullet, London Breakout, etc.).
+    - Implémentation du système de sauvegarde/édition des stratégies personnalisées.
+    - Correction des erreurs de compilation et intégration dans `App.tsx`.
+- **Blocages :** Aucun pour le moment.
+- **Next :** Implémentation de la synchronisation automatique avec l'API Tradovate.
+
+## Bugs & Dettes Techniques
+- [ ] Améliorer l'éditeur de code (Monaco Editor ou similaire).
+- [ ] Ajouter des tests unitaires pour le moteur de simulation.
+- [ ] Optimiser les requêtes Firestore (pagination des trades).

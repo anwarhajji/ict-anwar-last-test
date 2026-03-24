@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { BacktestStats, TradeEntry } from '../../types';
+import { BacktestStats, TradeEntry, UserProfile } from '../../types';
 
 interface DashboardPanelProps {
     balance: number;
@@ -10,6 +10,7 @@ interface DashboardPanelProps {
     currentAsset: string;
     onAssetChange: (asset: string) => void;
     onClose?: () => void;
+    userProfile?: UserProfile | null;
 }
 
 export const DashboardPanel: React.FC<DashboardPanelProps> = ({ 
@@ -19,10 +20,18 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     tradeHistory = [], // Default to empty array
     currentAsset, 
     onAssetChange, 
-    onClose 
+    onClose,
+    userProfile
 }) => {
     // Local State for Dashboard Views
     const [subTab, setSubTab] = useState<'OVERVIEW' | 'COMPARE' | '15m' | '5m' | '1m'>('OVERVIEW');
+
+    const userName = useMemo(() => {
+        if (!userProfile) return 'Trader';
+        if (userProfile.firstName) return userProfile.firstName;
+        if (userProfile.displayName) return userProfile.displayName.split(' ')[0];
+        return 'Trader';
+    }, [userProfile]);
 
     // --- CALCULATE MANUAL TRADING STATS (Real-time from Paper Trading) ---
     const manualStats = useMemo(() => {
@@ -141,7 +150,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-6 border-b border-[#2a2e39] gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-white mb-2">Trading Dashboard</h1>
+                        <h1 className="text-3xl font-bold text-white mb-1">Welcome, {userName}</h1>
                         <p className="text-gray-500 text-sm">
                             Performance metrics for <span className="text-blue-400 font-bold">{currentAsset}</span> 
                             {showManual ? ' (Paper Trading)' : ' (Algorithm Backtest)'}

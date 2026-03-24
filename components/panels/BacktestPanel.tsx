@@ -23,8 +23,99 @@ export const BacktestPanel: React.FC<BacktestPanelProps> = ({ onStartReplay }) =
                     createdAt: new Date().toISOString()
                 }
             ]
+        },
+        {
+            id: '2',
+            name: 'ICT Silver Bullet',
+            description: 'A time-based volatility setup occurring during specific 60-minute windows.',
+            createdAt: new Date().toISOString(),
+            versions: [
+                {
+                    id: 'v1',
+                    versionNumber: 1,
+                    rules: ['Time Windows (EST): 3-4 AM, 10-11 AM, 2-3 PM', 'Identify clear draw on liquidity (DOL)', 'Enter on the first FVG formed towards the DOL'],
+                    winRate: 72,
+                    totalTrades: 85,
+                    profitFactor: 2.1,
+                    createdAt: new Date().toISOString()
+                }
+            ]
+        },
+        {
+            id: '3',
+            name: '2022 Mentorship Model',
+            description: 'Liquidity Sweep followed by MSS and a return to a Fair Value Gap.',
+            createdAt: new Date().toISOString(),
+            versions: [
+                {
+                    id: 'v1',
+                    versionNumber: 1,
+                    rules: ['Identify liquidity sweep of Swing High/Low', 'Wait for Market Structure Shift (MSS)', 'Identify FVG created during displacement', 'Enter on retracement into FVG'],
+                    winRate: 65,
+                    totalTrades: 110,
+                    profitFactor: 1.8,
+                    createdAt: new Date().toISOString()
+                }
+            ]
+        },
+        {
+            id: '4',
+            name: 'ICT Unicorn',
+            description: 'Overlap of a Breaker Block and a Fair Value Gap.',
+            createdAt: new Date().toISOString(),
+            versions: [
+                {
+                    id: 'v1',
+                    versionNumber: 1,
+                    rules: ['Identify a Breaker Block (failed Order Block)', 'Look for an FVG that aligns with the Breaker', 'Enter at the overlap area'],
+                    winRate: 75,
+                    totalTrades: 42,
+                    profitFactor: 2.5,
+                    createdAt: new Date().toISOString()
+                }
+            ]
+        },
+        {
+            id: '5',
+            name: 'OTE (Optimal Trade Entry)',
+            description: 'Fibonacci retracement levels within a defined dealing range.',
+            createdAt: new Date().toISOString(),
+            versions: [
+                {
+                    id: 'v1',
+                    versionNumber: 1,
+                    rules: ['Identify clear dealing range', 'Draw Fib from Low to High (Long)', 'Wait for price to retrace into 0.62 - 0.79 zone'],
+                    winRate: 62,
+                    totalTrades: 156,
+                    profitFactor: 1.6,
+                    createdAt: new Date().toISOString()
+                }
+            ]
         }
     ]);
+
+    const handleNewStrategy = () => {
+        const newId = (strategies.length + 1).toString();
+        const newStrategy: Strategy = {
+            id: newId,
+            name: `New Strategy ${newId}`,
+            description: 'A custom trading strategy.',
+            createdAt: new Date().toISOString(),
+            versions: [
+                {
+                    id: `v${newId}-1`,
+                    versionNumber: 1,
+                    rules: ['Rule 1: Define your entry criteria', 'Rule 2: Define your exit criteria'],
+                    winRate: 0,
+                    totalTrades: 0,
+                    profitFactor: 0,
+                    createdAt: new Date().toISOString()
+                }
+            ]
+        };
+        setStrategies([...strategies, newStrategy]);
+    };
+
     const [sessions, setSessions] = useState<BacktestSession[]>([]);
     const [activeTab, setActiveTab] = useState<'STRATEGIES' | 'SESSIONS'>('STRATEGIES');
 
@@ -70,7 +161,33 @@ export const BacktestPanel: React.FC<BacktestPanelProps> = ({ onStartReplay }) =
                                         <h3 className="text-xl font-bold text-white">{strategy.name}</h3>
                                         <p className="text-sm text-gray-400 mt-1">{strategy.description}</p>
                                     </div>
-                                    <button className="text-blue-400 hover:text-blue-300 text-sm font-bold bg-blue-900/20 px-3 py-1 rounded">
+                                    <button 
+                                        onClick={() => {
+                                            const updatedStrategies = strategies.map(s => {
+                                                if (s.id === strategy.id) {
+                                                    const newVersionNumber = s.versions.length + 1;
+                                                    return {
+                                                        ...s,
+                                                        versions: [
+                                                            ...s.versions,
+                                                            {
+                                                                id: `v${s.id}-${newVersionNumber}`,
+                                                                versionNumber: newVersionNumber,
+                                                                rules: [`Rule 1: New version ${newVersionNumber} criteria`],
+                                                                winRate: 0,
+                                                                totalTrades: 0,
+                                                                profitFactor: 0,
+                                                                createdAt: new Date().toISOString()
+                                                            }
+                                                        ]
+                                                    };
+                                                }
+                                                return s;
+                                            });
+                                            setStrategies(updatedStrategies);
+                                        }}
+                                        className="text-blue-400 hover:text-blue-300 text-sm font-bold bg-blue-900/20 px-3 py-1 rounded"
+                                    >
                                         + New Version
                                     </button>
                                 </div>
@@ -100,7 +217,10 @@ export const BacktestPanel: React.FC<BacktestPanelProps> = ({ onStartReplay }) =
                         ))}
                         
                         {/* Add New Strategy Card */}
-                        <div className="border-2 border-dashed border-[#2a2e39] rounded-xl p-6 flex flex-col items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-400 transition-colors cursor-pointer min-h-[300px]">
+                        <div 
+                            onClick={handleNewStrategy}
+                            className="border-2 border-dashed border-[#2a2e39] rounded-xl p-6 flex flex-col items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-400 transition-colors cursor-pointer min-h-[300px]"
+                        >
                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                             <span className="font-bold">Create New Strategy</span>
                         </div>

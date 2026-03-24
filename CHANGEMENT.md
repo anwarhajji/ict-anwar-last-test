@@ -1,51 +1,49 @@
-# FILE: CHANGEMENT.md
+# Changelog - SaaS Trading Journal & Bot Manager
 
-# CHANGELOG
+## [Unreleased]
 
-Toutes les modifications notables de ce projet seront documentées dans ce fichier.
-
-## [Unreleased] - Maintenance & Ops
 ### Added
-- Guide complet pour le test en local et sur serveur dédié (`GUIDE_LOCAL.md`).
-- Variables d'environnement Firebase dans `.env.example`.
-- Support de `VITE_FIREBASE_FIRESTORE_DATABASE_ID` dans `firebase.ts`.
-### Fixed
-- Correction des erreurs de rendu dans `AdminPanel` dues à des profils utilisateurs incomplets.
-- Mise à jour des règles `firestore.rules` pour permettre aux rôles `SUPER_ADMIN` et `OWNER` de lister les utilisateurs.
-- Correction de la fonction `isAdmin()` dans les règles pour éviter les erreurs `get()` sur des documents inexistants.
+- **Repository GitHub :** Ajout de l'URL du repository officiel ([https://github.com/anwarhajji/ict-anwar-last-test.git](https://github.com/anwarhajji/ict-anwar-last-test.git)) dans `package.json`, `PLAN.md` et création du fichier `README.md`.
+- **Page Profil :** Ajout de la gestion des informations personnelles et des paramètres de bot.
+- **Bot Settings :** Possibilité de définir un capital de départ (Starting Balance) et une limite de bots (1 à 5) par utilisateur.
+- **Bot Suivi :** Dashboard de suivi consolidé affichant l'Equity totale, le PnL global et le taux de réussite moyen de tous les bots actifs.
+- **Limites de Bots :** Enforcement de la limite de bots configurée dans le profil lors de la création d'un nouveau bot.
+- **Module Bots :** Création et gestion de bots de trading algorithmique (mode démo).
+- **Éditeur de Stratégies :** Interface pour écrire et sauvegarder des stratégies JavaScript personnalisées.
+- **Stratégies Intégrées :** Ajout de 5 modèles (ICT Silver Bullet, London Breakout v2.0, NQ FVG Scalper, 2022 Mentorship Model, ICT Unicorn).
+- **Moteur de Simulation :** Exécution en temps réel des scripts de stratégie sur données simulées.
+- **Persistance Firebase :** Sauvegarde automatique des bots et stratégies personnalisées dans Firestore.
+- **Intégration App.tsx :** Ajout de l'onglet "Bots" dans la navigation principale.
 
-## [v0.4.0] - Phase 4
-### Added
-- Filtres (Jour, Impact) et explications dynamiques sur le calendrier économique (`NewsPanel`).
-- `BotsPanel` pour la gestion des bots de trading automatisés en mode simulé.
-- `RiskPanel` pour la configuration des limites de risque (Daily Loss Limit, Max Drawdown).
-- Nouveaux types TypeScript (`Bot`, `RiskSettings`).
 ### Changed
-- Mise à jour des permissions pour le rôle `OWNER` (accès complet à l'AdminPanel, bypass des restrictions de fonctionnalités).
-- Amélioration de l'UI de l'AdminPanel (couleurs des badges de rôles, gestion des droits de modification).
-
-## [v0.3.0] - Phase 3
-### Added
-- `BacktestPanel` pour la gestion des stratégies et des sessions de replay.
-- `ProfilePanel` pour la gestion du compte utilisateur (abonnement, sécurité).
-- `AdminPanel` pour la gestion des utilisateurs (SaaS admin view).
-- Nouveaux types TypeScript (`Strategy`, `StrategyVersion`, `BacktestSession`, `UserProfile`).
-
-## [v0.2.0] - Phase 2
-### Added
-- Fichiers de documentation projet (`PLAN.md`, `ROADMAP.md`, `OPTIONAJOUTER.md`, `AVANCEMENT.md`, `CHANGEMENT.md`).
-- `BrokerPanel` pour la synchronisation des comptes de trading.
-- Fonctionnalité d'import CSV pour les trades historiques.
-
-## [v0.1.0] - Phase 1 MVP
-### Added
-- Authentification Google via Firebase.
-- Intégration Lightweight Charts avec outils de dessin (Draft Trades).
-- `JournalPanel` pour la prise de notes, tags et émotions.
-- `TasksPanel` pour les routines Pre/Post market.
-- `NewsPanel` pour le calendrier économique.
-- `StatsPanel` et `DashboardPanel` pour l'analyse des performances.
+- **Layout :** Amélioration de la navigation par onglets pour inclure les nouveaux modules.
+- **Stats :** Mise à jour des calculs de performance pour inclure les données de backtest/bots.
 
 ### Fixed
-- Correction du bug de connexion Google (gestion de l'erreur `auth/cancelled-popup-request`).
-- Résolution des erreurs `toFixed` sur les anciens trades sans `lotSize`.
+- **Compilation :** Correction d'une erreur de syntaxe (accolade fermante en trop) dans `BotsPanel.tsx`.
+- **Firebase :** Correction de la récupération des stratégies personnalisées après le premier chargement.
+
+### Security
+- **Firestore Rules :** Mise à jour des règles pour protéger les données de bots et stratégies par utilisateur.
+
+---
+
+## [v0.1.0] - 24/03/2026
+
+### Added
+- **Initial Release :** Setup de base avec Auth, Dashboard, Journal, Stats, News et Tasks.
+- **Firebase Setup :** Configuration Firestore et Auth (Google Login).
+- **UI :** Thème sombre (TradingView style) avec Tailwind CSS.
+- **Import CSV :** Support pour l'import manuel des trades Tradovate.
+- **Analytics :** KPIs de base et Equity Curve.
+- **Calendrier Économique :** Affichage des news à fort impact.
+- **Checklists :** Tâches quotidiennes pré/post market.
+
+---
+
+## Processus de Release
+- **Added :** Nouvelles fonctionnalités.
+- **Changed :** Modifications de fonctionnalités existantes.
+- **Fixed :** Corrections de bugs.
+- **Removed :** Fonctionnalités supprimées.
+- **Security :** Améliorations de la sécurité.

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UserProfile } from '../../types';
 import { User } from 'firebase/auth';
 
@@ -6,9 +6,22 @@ interface ProfilePanelProps {
     user: User | null;
     userProfile: UserProfile | null;
     onLogout: () => void;
+    onUpdateProfile?: (profile: UserProfile) => Promise<void>;
 }
 
-export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, onLogout }) => {
+export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, onLogout, onUpdateProfile }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [formData, setFormData] = useState({
+        firstName: userProfile?.firstName || '',
+        lastName: userProfile?.lastName || '',
+        displayName: userProfile?.displayName || user?.displayName || '',
+        botSettings: {
+            startingBalance: userProfile?.botSettings?.startingBalance || 10000,
+            maxBots: userProfile?.botSettings?.maxBots || 5
+        }
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
     // Use real profile data or fallback to defaults
     const profile: UserProfile = userProfile || {
         uid: user?.uid || '123',
@@ -19,6 +32,23 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, o
         plan: 'FREE',
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
+    };
+
+    const handleSave = async () => {
+        if (!onUpdateProfile) return;
+        setIsSaving(true);
+        try {
+            await onUpdateProfile({
+                ...profile,
+                ...formData,
+                displayName: formData.displayName || `${formData.firstName} ${formData.lastName}`.trim() || profile.displayName
+            });
+            setIsEditing(false);
+        } catch (error) {
+            console.error("Failed to update profile", error);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -43,10 +73,47 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, o
                     </div>
                     
                     <div className="flex-1 space-y-4 text-center md:text-left">
-                        <div>
-                            <h3 className="text-3xl font-bold text-white">{profile.displayName}</h3>
-                            <p className="text-gray-400">{profile.email}</p>
-                        </div>
+                        {isEditing ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-400 uppercase font-bold">First Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.firstName}
+                                        onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                        className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded px-3 py-2 outline-none focus:border-blue-500"
+                                        placeholder="First Name"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-400 uppercase font-bold">Last Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.lastName}
+                                        onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                        className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded px-3 py-2 outline-none focus:border-blue-500"
+                                        placeholder="Last Name"
+                                    />
+                                </div>
+                                <div className="space-y-1 sm:col-span-2">
+                                    <label className="text-xs text-gray-400 uppercase font-bold">Display Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.displayName}
+                                        onChange={e => setFormData({...formData, displayName: e.target.value})}
+                                        className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded px-3 py-2 outline-none focus:border-blue-500"
+                                        placeholder="Display Name"
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <h3 className="text-3xl font-bold text-white">
+                                    {profile.firstName || profile.lastName ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() : profile.displayName}
+                                </h3>
+                                <p className="text-gray-400">{profile.email}</p>
+                            </div>
+                        )}
                         
                         <div className="flex flex-wrap gap-3 justify-center md:justify-start">
                             <span className="bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full text-sm font-bold border border-blue-500/30">
@@ -58,9 +125,30 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, o
                         </div>
                         
                         <div className="pt-4 border-t border-[#2a2e39] flex flex-col sm:flex-row gap-4">
-                            <button className="bg-[#2a2e39] hover:bg-[#3a3f4c] text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                                Edit Profile
-                            </button>
+                            {isEditing ? (
+                                <>
+                                    <button 
+                                        onClick={handleSave}
+                                        disabled={isSaving}
+                                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {isSaving ? 'Saving...' : 'Save Changes'}
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsEditing(false)}
+                                        className="bg-[#2a2e39] hover:bg-[#3a3f4c] text-white font-bold py-2 px-6 rounded-lg transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </>
+                            ) : (
+                                <button 
+                                    onClick={() => setIsEditing(true)}
+                                    className="bg-[#2a2e39] hover:bg-[#3a3f4c] text-white font-bold py-2 px-6 rounded-lg transition-colors"
+                                >
+                                    Edit Profile
+                                </button>
+                            )}
                             <button 
                                 onClick={onLogout}
                                 className="bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-2 px-6 rounded-lg transition-colors border border-red-500/30"
@@ -72,6 +160,46 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, userProfile, o
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Bot Settings */}
+                    <div className="bg-[#151924] border border-[#2a2e39] rounded-xl p-6">
+                        <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 2V22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                            Bot Settings
+                        </h4>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center border-b border-[#2a2e39] pb-3">
+                                <span className="text-gray-400">Starting Balance</span>
+                                {isEditing ? (
+                                    <input 
+                                        type="number" 
+                                        value={formData.botSettings.startingBalance}
+                                        onChange={e => setFormData({...formData, botSettings: {...formData.botSettings, startingBalance: Number(e.target.value)}})}
+                                        className="w-24 bg-[#0b0e11] border border-[#2a2e39] rounded px-2 py-1 text-right outline-none focus:border-blue-500"
+                                    />
+                                ) : (
+                                    <span className="font-bold text-white">${profile.botSettings?.startingBalance || 10000}</span>
+                                )}
+                            </div>
+                            <div className="flex justify-between items-center border-b border-[#2a2e39] pb-3">
+                                <span className="text-gray-400">Max Test Bots</span>
+                                {isEditing ? (
+                                    <select 
+                                        value={formData.botSettings.maxBots}
+                                        onChange={e => setFormData({...formData, botSettings: {...formData.botSettings, maxBots: Number(e.target.value)}})}
+                                        className="bg-[#0b0e11] border border-[#2a2e39] rounded px-2 py-1 outline-none focus:border-blue-500"
+                                    >
+                                        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                ) : (
+                                    <span className="font-bold text-white">{profile.botSettings?.maxBots || 5}</span>
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-500 italic">
+                                * These settings define your starting capital and the number of bots you can run simultaneously in simulation mode.
+                            </p>
+                        </div>
+                    </div>
+
                     {/* Subscription Details */}
                     <div className="bg-[#151924] border border-[#2a2e39] rounded-xl p-6">
                         <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">

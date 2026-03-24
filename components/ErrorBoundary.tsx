@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => (this as any).setState({ hasError: false, error: null })}
               className="mt-6 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
             >
               Try again
@@ -58,6 +58,6 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }

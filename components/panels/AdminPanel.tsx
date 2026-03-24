@@ -187,9 +187,14 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-400 font-bold border border-blue-500/30">
-                                                    {(u.displayName || u.email || '?').charAt(0).toUpperCase()}
+                                                    {(u.firstName || u.displayName || u.email || '?').charAt(0).toUpperCase()}
                                                 </div>
-                                                <div className="font-bold text-white">{u.displayName || 'Unknown User'}</div>
+                                                <div>
+                                                    <div className="font-bold text-white">
+                                                        {u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : (u.displayName || 'Unknown User')}
+                                                    </div>
+                                                    {!showEmails && <div className="text-xs text-gray-500">{u.email}</div>}
+                                                </div>
                                             </div>
                                         </td>
                                         {showEmails && (

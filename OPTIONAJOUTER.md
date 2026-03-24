@@ -1,18 +1,27 @@
-# FILE: OPTIONAJOUTER.md
+# Options à Ajouter - SaaS Trading Journal & Bot Manager
 
-# OPTIONS À AJOUTER (Idées & Backlog)
+## 🚀 High Impact / Low Effort
+- [ ] **Revue Hebdomadaire Automatique :** Génération d'un résumé de la semaine par IA (Gemini).
+- [ ] **Scoring de Qualité de Trade :** Attribution d'une note (A, B, C) selon le respect du plan.
+- [ ] **Cooldown après Loss Streak :** Avertissement ou blocage temporaire après X pertes consécutives.
+- [ ] **Templates de Checklists :** Modèles pré-remplis pour différents types de traders (Scalper, Swing).
+- [ ] **Partage Coach (Read-only) :** Lien de partage sécurisé pour montrer son journal à un mentor.
 
-## High Impact / Low Effort
-- [ ] **Export PDF/CSV du journal** : Permettre au trader d'exporter sa semaine pour son coach.
-- [ ] **Mode "Zen"** : Cacher le PnL en cours (afficher uniquement des R multiples) pour réduire le stress émotionnel.
-- [x] **Tags automatiques** : Taguer automatiquement un trade "London Session" ou "NY Session" selon l'heure d'entrée (Implémenté via le service ICT).
+## 🛠️ High Impact / High Effort
+- [ ] **Session Replay Timeline :** Visualisation des trades sur un graphique interactif avec timeline.
+- [ ] **Import Multi-Brokers :** Support natif pour MetaTrader, Interactive Brokers, NinjaTrader.
+- [ ] **Prop Firm Rules Template :** Vérification automatique du respect des règles (Max DD, Daily Loss).
+- [ ] **Optimisation de Stratégie (Backtest) :** Test automatique de différents paramètres (RSI, EMA).
+- [ ] **Copieur de Trade (Copy Trading) :** Réplication des trades d'un compte maître vers des comptes esclaves.
 
-## High Impact / High Effort
-- [ ] **Intégration Webhooks TradingView** : Prendre des trades automatiquement basés sur des alertes TV.
-- [ ] **Session Replay Timeline** : Un lecteur vidéo-like qui rejoue l'action du prix tick-par-tick pour une journée passée.
-- [ ] **Dashboard Prop Firm** : Un template de dashboard qui traque spécifiquement les règles des prop firms (Drawdown max, Daily loss, Profit target).
+## ✨ Nice to Have
+- [ ] **Mode Sombre / Clair :** Personnalisation de l'interface.
+- [ ] **Notifications Push :** Alertes de prix ou de news sur mobile.
+- [ ] **Classement (Leaderboard) :** Comparaison anonyme des performances entre utilisateurs.
+- [ ] **Export PDF de Performance :** Rapports professionnels pour investisseurs.
+- [ ] **Intégration TradingView :** Affichage des graphiques TradingView directement dans l'app.
 
-## Nice to Have
-- [ ] **Revue hebdo automatique** : Un résumé généré par IA (Gemini) le dimanche soir analysant les erreurs de la semaine.
-- [ ] **Partage Read-Only** : Un lien public sécurisé pour partager un trade spécifique sur Twitter/Discord avec le graphique annoté.
-- [ ] **Mode Sombre/Clair** : Bien que le dark mode soit standard pour le trading, un mode clair peut être utile en extérieur.
+## 💡 Idées Futures
+- [ ] **Analyse de Sentiment Social :** Intégration de données Twitter/Reddit pour le sentiment de marché.
+- [ ] **Market Replay (v2) :** Entraînement en temps réel sur données historiques.
+- [ ] **Bot Marketplace :** Partage et vente de stratégies entre utilisateurs.

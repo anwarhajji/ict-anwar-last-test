@@ -1,7 +1,7 @@
 
 import { UTCTimestamp } from 'lightweight-charts';
 
-export { UTCTimestamp };
+export type { UTCTimestamp };
 
 export type SessionType = 'ASIA' | 'LONDON' | 'NEW_YORK' | 'NONE';
 export type ICTSetupType = '2022 Model' | 'Silver Bullet' | 'Unicorn' | 'OTE' | 'Breaker' | 'Standard FVG' | '8 AM Hour';
@@ -250,16 +250,24 @@ export interface UserFeatures {
     analytics: boolean;
 }
 
+export interface BotSettings {
+    startingBalance: number;
+    maxBots: number;
+}
+
 export interface UserProfile {
     uid: string;
     email: string;
     displayName: string;
+    firstName?: string;
+    lastName?: string;
     role: 'SUPER_ADMIN' | 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
     workspaceId: string;
     plan: 'FREE' | 'PRO' | 'ELITE';
     createdAt: string;
     lastLogin: string;
     features?: UserFeatures;
+    botSettings?: BotSettings;
 }
 
 // Phase 4 Additions

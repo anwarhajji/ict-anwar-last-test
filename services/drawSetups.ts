@@ -131,12 +131,12 @@ export const drawSetups = (
         if (exitTime && exitTime < (data[Math.max(0, firstVisibleIndex - 50)]?.time as number)) return;
 
         // Determine X coordinates
-        let x1 = timeScale.timeToCoordinate(entry.time);
-        let x2 = exitTime ? timeScale.timeToCoordinate(exitTime) : null;
+        let x1 = timeScale.timeToCoordinate(entry.time as any);
+        let x2 = exitTime ? timeScale.timeToCoordinate(exitTime as any) : null;
 
         // Handle Start X (if offscreen left)
         if (x1 === null) {
-            if (entryTime < firstVisibleTime) x1 = -10; // Allow drawing from left edge
+            if (entryTime < firstVisibleTime) x1 = -10 as any; // Allow drawing from left edge
             else return; // Should not happen if filtered correctly
         }
 
