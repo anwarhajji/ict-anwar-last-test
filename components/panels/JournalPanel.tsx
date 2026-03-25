@@ -16,6 +16,11 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
     const [mistakes, setMistakes] = useState('');
     const [algoSignal, setAlgoSignal] = useState('');
 
+    // --- ROBUST FILTERS ---
+    const [filterPair, setFilterPair] = useState('ALL');
+    const [filterType, setFilterType] = useState('ALL');
+    const [filterResult, setFilterResult] = useState('ALL');
+
     const algoTrades: TradeEntry[] = algoSignals.map(signal => {
         const existing = tradeHistory.find(t => t.id === `algo-${signal.time}`);
         if (existing) return existing;
@@ -32,12 +37,24 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
             confluences: signal.confluences,
             score: signal.score,
             algoSignal: signal.setupName,
-            timeframe: signal.timeframe
+            timeframe: signal.timeframe,
+            asset: signal.asset
         };
     });
 
     const manualTrades = tradeHistory.filter(t => !t.id.startsWith('algo-'));
-    const displayedTrades = viewMode === 'MANUAL' ? manualTrades : algoTrades;
+    const baseTrades = viewMode === 'MANUAL' ? manualTrades : algoTrades;
+
+    // Apply Filters
+    const displayedTrades = baseTrades.filter(trade => {
+        if (filterPair !== 'ALL' && trade.asset !== filterPair) return false;
+        if (filterType !== 'ALL' && trade.type !== filterType) return false;
+        if (filterResult !== 'ALL' && trade.result !== filterResult) return false;
+        return true;
+    });
+
+    // Extract unique pairs for the filter dropdown
+    const uniquePairs = Array.from(new Set(baseTrades.map(t => t.asset).filter(Boolean))) as string[];
 
     const handleSelectTrade = (trade: TradeEntry) => {
         setSelectedTrade(trade);
@@ -105,6 +122,48 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
                     </button>
                 </div>
 
+                {/* Robust Filters */}
+                <div className="grid grid-cols-3 gap-2 mb-4 shrink-0">
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Pair / Asset</label>
+                        <select 
+                            value={filterPair}
+                            onChange={(e) => setFilterPair(e.target.value)}
+                            className="w-full bg-[#151924] text-xs text-white border border-[#2a2e39] rounded px-2 py-1.5 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All Pairs</option>
+                            {uniquePairs.map(pair => (
+                                <option key={pair} value={pair}>{pair}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Type</label>
+                        <select 
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                            className="w-full bg-[#151924] text-xs text-white border border-[#2a2e39] rounded px-2 py-1.5 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All Types</option>
+                            <option value="LONG">Long</option>
+                            <option value="SHORT">Short</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Result</label>
+                        <select 
+                            value={filterResult}
+                            onChange={(e) => setFilterResult(e.target.value)}
+                            className="w-full bg-[#151924] text-xs text-white border border-[#2a2e39] rounded px-2 py-1.5 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All Results</option>
+                            <option value="WIN">Win</option>
+                            <option value="LOSS">Loss</option>
+                            <option value="OPEN">Open</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
                     {displayedTrades.map(trade => (
                         <div 
@@ -113,7 +172,10 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
                             className={`p-3 rounded border cursor-pointer transition-colors ${selectedTrade?.id === trade.id ? 'bg-blue-900/30 border-blue-500' : 'bg-[#151924] border-[#2a2e39] hover:border-gray-500'}`}
                         >
                             <div className="flex justify-between items-center mb-1">
-                                <span className={`font-bold ${trade.type === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>{trade.type}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`font-bold ${trade.type === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>{trade.type}</span>
+                                    {trade.asset && <span className="text-xs font-bold text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded">{trade.asset}</span>}
+                                </div>
                                 <span className={`font-mono text-sm ${trade.pnl && trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                     ${trade.pnl?.toFixed(2) || '0.00'}
                                 </span>

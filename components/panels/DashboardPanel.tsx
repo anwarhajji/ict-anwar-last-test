@@ -116,11 +116,18 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     const avgLoss = showManual ? activeStats.avgLoss : 0;
 
     const assets = [
+        { id: 'NQ (CME)', label: 'Nasdaq 100', icon: '📈' },
+        { id: 'ES (CME)', label: 'S&P 500', icon: '📊' },
         { id: 'MGC (COMEX)', label: 'Gold (Micro)', icon: '🟡' },
+        { id: 'XAUUSD', label: 'Gold (Spot)', icon: '🥇' },
+        { id: 'EURUSD', label: 'EUR/USD', icon: '💶' },
+        { id: 'GBPUSD', label: 'GBP/USD', icon: '💷' },
+        { id: 'USDJPY', label: 'USD/JPY', icon: '💴' },
         { id: 'BTCUSDT', label: 'Bitcoin', icon: '₿' },
         { id: 'ETHUSDT', label: 'Ethereum', icon: '⟠' },
         { id: 'SOLUSDT', label: 'Solana', icon: '◎' },
-        { id: 'EURUSDT', label: 'Euro', icon: '€' }
+        { id: 'XRPUSDT', label: 'Ripple', icon: '✕' },
+        { id: 'DOGEUSDT', label: 'Dogecoin', icon: 'Ð' }
     ];
 
     const MetricCard = ({ title, value, subValue, color }: { title: string, value: string, subValue?: string, color: string }) => (

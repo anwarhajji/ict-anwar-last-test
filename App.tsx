@@ -162,7 +162,7 @@ const App: React.FC = () => {
     // UI State
     const [activeTab, setActiveTab] = useState('DASHBOARD');
     const [settingsTab, setSettingsTab] = useState('VISIBILITY'); 
-    const [asset, setAsset] = useState('MGC (COMEX)');
+    const [asset, setAsset] = useState('NQ (CME)');
     const [timeframe, setTimeframe] = useState('15m');
     const [showTopSetups, setShowTopSetups] = useState(false);
     const [clickedEntry, setClickedEntry] = useState<EntrySignal | null>(null);
@@ -368,7 +368,8 @@ const App: React.FC = () => {
             lotSize,
             result: 'OPEN', 
             confluences: [], 
-            score: 0 
+            score: 0,
+            asset: asset // Add current global asset
         };
         setPositions(prev => [...prev, newTrade]); 
         setAlert({ msg: `${type} Trade Opened at ${price.toFixed(2)} (Lots: ${lotSize})`, type: 'info' });
@@ -500,7 +501,7 @@ const App: React.FC = () => {
 
             setBiasMatrix(updatedMatrix);
             
-            const _filteredEntries = _rawEntries.filter(e => {
+            const _filteredEntries = _rawEntries.map(e => ({ ...e, asset })).filter(e => {
                 const meetsProb = e.winProbability >= simulation.minWinProbability;
                 // @ts-ignore
                 const meetsGrade = e.setupGrade ? simulation.allowedGrades[e.setupGrade] : false;
@@ -760,15 +761,6 @@ const App: React.FC = () => {
                     <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('DASHBOARD')}>
                         <span className="text-blue-500">ICT</span>MASTER
                     </div>
-                    <div className="h-6 w-[1px] bg-gray-700 mx-2 hidden md:block"></div>
-                    <select value={asset} onChange={e => setAsset(e.target.value)} className="bg-[#0b0e11] text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500">
-                        {['MGC (COMEX)', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'EURUSDT'].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <div className="flex bg-[#0b0e11] rounded border border-gray-700 p-0.5 overflow-x-auto max-w-[120px] md:max-w-none scrollbar-hide">
-                        {['1m', '5m', '15m', '1h', '4h'].map(tf => ( 
-                            <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-0.5 text-xs rounded shrink-0 ${timeframe === tf ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}>{tf}</button> 
-                        ))}
-                    </div>
                 </div>
                 <div className="flex items-center gap-6">
                     <div className="hidden md:flex flex-col items-end">
@@ -840,6 +832,25 @@ const App: React.FC = () => {
 
                 {/* CENTER CONTENT */}
                 <main className="flex-1 relative bg-[#0b0e11] flex flex-col min-w-0">
+                    {['CHART', 'TRADING', 'BACKTEST', 'SETUPS', 'SCANNER'].includes(activeTab) && (
+                        <div className="h-12 bg-[#151924] border-b border-[#2a2e39] flex items-center px-4 gap-4 shrink-0 z-40">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-500 uppercase">Asset:</span>
+                                <select value={asset} onChange={e => setAsset(e.target.value)} className="bg-[#0b0e11] text-sm font-bold text-white border border-[#2a2e39] rounded px-2 py-1 outline-none focus:border-blue-500">
+                                    {['NQ (CME)', 'ES (CME)', 'MGC (COMEX)', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT'].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            <div className="h-4 w-[1px] bg-[#2a2e39]"></div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-500 uppercase">Timeframe:</span>
+                                <div className="flex bg-[#0b0e11] rounded border border-[#2a2e39] p-0.5 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                    {['1m', '5m', '15m', '1h', '4h'].map(tf => ( 
+                                        <button key={tf} onClick={() => setTimeframe(tf)} className={`px-3 py-1 text-xs font-bold rounded shrink-0 transition-colors ${timeframe === tf ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>{tf}</button> 
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* TRADING MODE OVERRIDE */}
                     {activeTab === 'TRADING' ? (
                         <div className="flex h-full">

@@ -26,6 +26,7 @@ interface FilterState {
     setup: 'ALL' | string;
     dateRange: 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
     timeframe: 'ALL' | string;
+    asset: 'ALL' | string;
 }
 
 const SETUP_TYPES: string[] = ['2022 Model', 'Silver Bullet', 'Unicorn', 'OTE', 'Breaker', 'Standard FVG', '8 AM Hour'];
@@ -34,14 +35,23 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
     const [viewMode, setViewMode] = useState<'MANUAL' | 'ALGO'>('ALGO');
     
     // Filter & Sort State
-    const [filters, setFilters] = useState<FilterState>({ type: 'ALL', result: 'ALL', setup: 'ALL', dateRange: 'ALL', timeframe: 'ALL' });
+    const [filters, setFilters] = useState<FilterState>({ type: 'ALL', result: 'ALL', setup: 'ALL', dateRange: 'ALL', timeframe: 'ALL', asset: 'ALL' });
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'time', direction: 'desc' });
+
+    // Extract unique assets for the filter dropdown
+    const uniqueAssets = useMemo(() => {
+        const allData = viewMode === 'MANUAL' ? tradeHistory.filter(t => !t.id.startsWith('algo-')) : recentHistory;
+        return Array.from(new Set(allData.map(item => (item as any).asset).filter(Boolean))) as string[];
+    }, [tradeHistory, recentHistory, viewMode]);
 
     // --- DATA PROCESSING (Filter & Sort) ---
     const processedData = useMemo(() => {
         let data: any[] = viewMode === 'MANUAL' ? tradeHistory.filter(t => !t.id.startsWith('algo-')) : [...recentHistory];
 
         // 1. FILTER
+        if (filters.asset !== 'ALL') {
+            data = data.filter(item => item.asset === filters.asset);
+        }
         if (filters.type !== 'ALL') {
             data = data.filter(item => item.type === filters.type);
         }
@@ -214,6 +224,19 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                 {period === 'ALL' ? 'All Time' : period === 'TODAY' ? 'Daily' : period === 'WEEK' ? 'Weekly' : 'Monthly'}
                             </button>
                         ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Asset:</span>
+                        <select 
+                            value={filters.asset} 
+                            onChange={(e) => setFilters({...filters, asset: e.target.value})}
+                            className="bg-[#151924] text-white text-sm border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                        >
+                            <option value="ALL">All Assets</option>
+                            {uniqueAssets.map(asset => (
+                                <option key={asset} value={asset}>{asset}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-gray-500 uppercase">Type:</span>

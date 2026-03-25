@@ -59,6 +59,7 @@ export interface TradeEntry {
     pnl?: number;
     confluences: string[];
     score: number;
+    asset?: string; // Added for robust filtering
     // Phase 1 Additions
     notes?: string;
     emotions?: string[];
@@ -84,6 +85,7 @@ export interface EntrySignal {
     price: number;
     score: number;
     confluences: string[];
+    asset?: string; // Added for robust filtering
     sl: number;
     tp: number;
     winProbability: number;
