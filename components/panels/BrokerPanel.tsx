@@ -3,9 +3,10 @@ import { TradeEntry, BrokerConnection } from '../../types';
 
 interface BrokerPanelProps {
     onImportTrades: (trades: TradeEntry[]) => void;
+    setAlert: (a: {msg: string, type: 'success'|'error'|'info'|'warning'} | null) => void;
 }
 
-export const BrokerPanel: React.FC<BrokerPanelProps> = ({ onImportTrades }) => {
+export const BrokerPanel: React.FC<BrokerPanelProps> = ({ onImportTrades, setAlert }) => {
     const [connections, setConnections] = useState<BrokerConnection[]>([
         { id: '1', brokerName: 'Tradovate', accountName: 'Demo-12345', status: 'DISCONNECTED' },
         { id: '2', brokerName: 'NinjaTrader', accountName: 'Live-98765', status: 'DISCONNECTED' }
@@ -67,9 +68,9 @@ export const BrokerPanel: React.FC<BrokerPanelProps> = ({ onImportTrades }) => {
             }
             if (newTrades.length > 0) {
                 onImportTrades(newTrades);
-                alert(`Successfully imported ${newTrades.length} trades!`);
+                setAlert({ msg: `Successfully imported ${newTrades.length} trades!`, type: 'success' });
             } else {
-                alert('No valid trades found in CSV.');
+                setAlert({ msg: 'No valid trades found in CSV.', type: 'error' });
             }
         };
         reader.readAsText(file);

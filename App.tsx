@@ -377,6 +377,11 @@ const App: React.FC = () => {
     const [slInput, setSlInput] = useState('');
     const [tpInput, setTpInput] = useState('');
     const [alert, setAlert] = useState<{msg: string, type: 'success'|'error'|'info'|'warning'} | null>(null);
+    const [confirmDialog, setConfirmDialog] = useState<{
+        msg: string;
+        onConfirm: () => void;
+        onCancel?: () => void;
+    } | null>(null);
 
     // Persistence Effects
     useEffect(() => { localStorage.setItem('ict-sim-balance', balance.toString()); }, [balance]);
@@ -387,16 +392,21 @@ const App: React.FC = () => {
 
     // Reset Function
     const resetAccount = () => {
-        if(confirm("Are you sure you want to reset your paper trading account? This action cannot be undone.")) {
-            setBalance(50000);
-            setPositions([]);
-            setTradeHistory([]);
-            setDraftTrade(null);
-            localStorage.removeItem('ict-sim-balance');
-            localStorage.removeItem('ict-sim-positions');
-            localStorage.removeItem('ict-sim-history');
-            setAlert({ msg: "Account Reset Successful", type: 'info' });
-        }
+        setConfirmDialog({
+            msg: "Are you sure you want to reset your paper trading account? This action cannot be undone.",
+            onConfirm: () => {
+                setBalance(50000);
+                setPositions([]);
+                setTradeHistory([]);
+                setDraftTrade(null);
+                localStorage.removeItem('ict-sim-balance');
+                localStorage.removeItem('ict-sim-positions');
+                localStorage.removeItem('ict-sim-history');
+                setAlert({ msg: "Account Reset Successful", type: 'info' });
+                setConfirmDialog(null);
+            },
+            onCancel: () => setConfirmDialog(null)
+        });
     };
 
     // --- ACTIONS ---
@@ -827,6 +837,44 @@ const App: React.FC = () => {
     return (
         <div className="flex flex-col h-screen bg-[#0b0e11] text-[#e1e3e6] font-sans overflow-hidden">
             {alert && <ToastNotification message={alert.msg} type={alert.type} onClose={() => setAlert(null)} />}
+            
+            {/* Confirmation Modal */}
+            {confirmDialog && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-[#1e222d] w-full max-w-sm rounded-xl border border-blue-500 shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-4 border-b border-gray-700 bg-[#151924]">
+                            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                                <span className="text-blue-500">CONFIRMATION</span>
+                            </h3>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <p className="text-gray-300 text-sm leading-relaxed">
+                                {confirmDialog.msg}
+                            </p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => {
+                                        if (confirmDialog.onCancel) confirmDialog.onCancel();
+                                        setConfirmDialog(null);
+                                    }} 
+                                    className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded font-bold transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        confirmDialog.onConfirm();
+                                        setConfirmDialog(null);
+                                    }}
+                                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold shadow-lg shadow-blue-900/30 transition-all transform active:scale-95"
+                                >
+                                    Confirm
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {showTopSetups && <TopSetupsModal entries={entries} onClose={() => setShowTopSetups(false)} />}
             {clickedEntry && <EntryDetailModal entry={clickedEntry} onClose={() => setClickedEntry(null)} onReplay={() => handleStartReplay(clickedEntry)} />}
 
@@ -1004,6 +1052,7 @@ const App: React.FC = () => {
                             <div className="w-[340px] bg-[#151924]">
                                 <Panels 
                                     activeTab="TRADING" setActiveTab={setActiveTab}
+                                    setAlert={setAlert}
                                     structure={structure} entries={entries} setClickedEntry={setClickedEntry}
                                     balance={balance} positions={positions} data={data} closeTrade={closeTrade}
                                     enterTrade={enterTrade} slInput={slInput} setSlInput={setSlInput}
@@ -1060,6 +1109,7 @@ const App: React.FC = () => {
                                     setTradeHistory(prev => [...prev, ...newTrades]);
                                     setActiveTab('STATS');
                                 }} 
+                                setAlert={setAlert}
                             />
                         ) : activeTab === 'STATS' ? (
                             !hasAccess('STATS') ? <FeatureLocked featureName="Analytics & Stats" /> :
@@ -1136,9 +1186,9 @@ const App: React.FC = () => {
                         ) : activeTab === 'ADMIN' ? (
                             (userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN') ? <AdminPanel userProfile={userProfile} /> : <FeatureLocked featureName="Administration" />
                         ) : activeTab === 'BOTS' ? (
-                            !hasAccess('BOTS') ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel userProfile={userProfile} />
+                            !hasAccess('BOTS') ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel userProfile={userProfile} setAlert={setAlert} />
                         ) : activeTab === 'RISK' ? (
-                            !hasAccess('TRADING') ? <FeatureLocked featureName="Risk Management" /> : <RiskPanel />
+                            !hasAccess('TRADING') ? <FeatureLocked featureName="Risk Management" /> : <RiskPanel setAlert={setAlert} />
                         ) : (
                             <>
                                 <div className="h-6 bg-[#0b0e11] border-b border-[#2a2e39] flex items-center overflow-hidden whitespace-nowrap px-2 z-10 shrink-0">
@@ -1196,6 +1246,7 @@ const App: React.FC = () => {
                         </div>
                         <Panels 
                             activeTab={activeTab} setActiveTab={setActiveTab}
+                            setAlert={setAlert}
                             structure={structure} entries={entries} setClickedEntry={setClickedEntry}
                             balance={balance} positions={positions} data={data} closeTrade={closeTrade}
                             enterTrade={enterTrade} slInput={slInput} setSlInput={setSlInput}

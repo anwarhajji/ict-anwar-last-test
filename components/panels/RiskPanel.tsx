@@ -4,7 +4,11 @@ import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
-export const RiskPanel: React.FC = () => {
+interface RiskPanelProps {
+    setAlert: (a: {msg: string, type: 'success'|'error'|'info'|'warning'} | null) => void;
+}
+
+export const RiskPanel: React.FC<RiskPanelProps> = ({ setAlert }) => {
     const [user, setUser] = useState<any>(null);
     const [settings, setSettings] = useState<RiskSettings>({
         dailyLossLimit: 500,
@@ -50,17 +54,17 @@ export const RiskPanel: React.FC = () => {
 
     const handleSave = async () => {
         if (!user) {
-            alert('Risk settings saved locally. Log in to sync across devices.');
+            setAlert({ msg: 'Risk settings saved locally. Log in to sync across devices.', type: 'info' });
             return;
         }
 
         try {
             const docRef = doc(db, `users/${user.uid}/data/risk`);
             await setDoc(docRef, { settings }, { merge: true });
-            alert('Risk settings saved to Firebase successfully.');
+            setAlert({ msg: 'Risk settings saved to Firebase successfully.', type: 'success' });
         } catch (error) {
             handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/data/risk`);
-            alert('Error saving risk settings.');
+            setAlert({ msg: 'Error saving risk settings.', type: 'error' });
         }
     };
 

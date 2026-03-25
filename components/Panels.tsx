@@ -37,6 +37,7 @@ interface PanelProps {
     onViewOnChart?: (e: EntrySignal) => void;
     currentAsset?: string;
     resetAccount?: () => void;
+    setAlert: (a: {msg: string, type: 'success'|'error'|'info'|'warning'} | null) => void;
     
     // Draft Trade Props (Optional for other panels, needed for Trading)
     draftTrade?: DraftTrade | null;
