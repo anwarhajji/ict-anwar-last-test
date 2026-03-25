@@ -31,36 +31,15 @@ interface FilterState {
 const SETUP_TYPES: string[] = ['2022 Model', 'Silver Bullet', 'Unicorn', 'OTE', 'Breaker', 'Standard FVG', '8 AM Hour'];
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHistory, tradeHistory = [], setClickedEntry, onFocusEntry, focusedEntry, onReplay }) => {
-    const [viewMode, setViewMode] = useState<'MANUAL' | 'ALGO'>('MANUAL');
+    const [viewMode, setViewMode] = useState<'MANUAL' | 'ALGO'>('ALGO');
     
     // Filter & Sort State
     const [filters, setFilters] = useState<FilterState>({ type: 'ALL', result: 'ALL', setup: 'ALL', dateRange: 'ALL', timeframe: 'ALL' });
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'time', direction: 'desc' });
 
-    // Calculate Manual Stats (Aggregate)
-    const manualWins = tradeHistory.filter(t => t.result === 'WIN').length;
-    const manualLosses = tradeHistory.filter(t => t.result === 'LOSS').length;
-    const manualTotal = manualWins + manualLosses;
-    const manualWinRate = manualTotal > 0 ? (manualWins / manualTotal) * 100 : 0;
-    const manualPnL = tradeHistory.reduce((acc, t) => acc + (t.pnl || 0), 0);
-
-    // --- SORTING HANDLER ---
-    const handleSort = (key: SortKey) => {
-        let direction: SortDirection = 'desc';
-        if (sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = 'asc';
-        }
-        setSortConfig({ key, direction });
-    };
-
-    const SortIcon = ({ column }: { column: SortKey }) => {
-        if (sortConfig.key !== column) return <span className="text-gray-600 ml-1 opacity-50">⇅</span>;
-        return <span className="text-blue-400 ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
-    };
-
     // --- DATA PROCESSING (Filter & Sort) ---
     const processedData = useMemo(() => {
-        let data: any[] = viewMode === 'MANUAL' ? [...tradeHistory] : [...recentHistory];
+        let data: any[] = viewMode === 'MANUAL' ? tradeHistory.filter(t => !t.id.startsWith('algo-')) : [...recentHistory];
 
         // 1. FILTER
         if (filters.type !== 'ALL') {
@@ -142,6 +121,31 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
         return data;
     }, [tradeHistory, recentHistory, viewMode, filters, sortConfig]);
 
+    // Calculate Filtered Stats
+    const filteredStats = useMemo(() => {
+        const wins = processedData.filter(t => (viewMode === 'MANUAL' ? t.result === 'WIN' : t.backtestResult === 'WIN')).length;
+        const losses = processedData.filter(t => (viewMode === 'MANUAL' ? t.result === 'LOSS' : t.backtestResult === 'LOSS')).length;
+        const total = wins + losses;
+        const winRate = total > 0 ? (wins / total) * 100 : 0;
+        const pnl = processedData.reduce((acc, t) => acc + (viewMode === 'MANUAL' ? (t.pnl || 0) : (t.backtestPnL || 0)), 0);
+        
+        return { wins, losses, total, winRate, pnl };
+    }, [processedData, viewMode]);
+
+    // --- SORTING HANDLER ---
+    const handleSort = (key: SortKey) => {
+        let direction: SortDirection = 'desc';
+        if (sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = 'asc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const SortIcon = ({ column }: { column: SortKey }) => {
+        if (sortConfig.key !== column) return <span className="text-gray-600 ml-1 opacity-50">⇅</span>;
+        return <span className="text-blue-400 ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+    };
+
 
     return (
         <div className="w-full h-full bg-[#0b0e11] overflow-y-auto custom-scrollbar flex flex-col">
@@ -175,25 +179,25 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                     <div className="bg-[#151924] p-5 rounded-lg border border-[#2a2e39] shadow-sm">
                         <div className="text-gray-500 text-xs uppercase font-bold mb-1">Win Rate</div>
                         <div className="text-2xl font-bold text-white font-mono">
-                            {viewMode === 'MANUAL' ? manualWinRate.toFixed(1) : backtestStats.winRate.toFixed(1)}%
+                            {filteredStats.winRate.toFixed(1)}%
                         </div>
                     </div>
                     <div className="bg-[#151924] p-5 rounded-lg border border-[#2a2e39] shadow-sm">
                         <div className="text-gray-500 text-xs uppercase font-bold mb-1">Net PnL</div>
-                        <div className={`text-2xl font-bold font-mono ${viewMode === 'MANUAL' ? (manualPnL >= 0 ? 'text-green-400' : 'text-red-400') : (backtestStats.netPnL >= 0 ? 'text-green-400' : 'text-red-400')}`}>
-                            ${viewMode === 'MANUAL' ? manualPnL.toLocaleString() : backtestStats.netPnL.toLocaleString()}
+                        <div className={`text-2xl font-bold font-mono ${filteredStats.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ${filteredStats.pnl.toLocaleString()}
                         </div>
                     </div>
                     <div className="bg-[#151924] p-5 rounded-lg border border-[#2a2e39] shadow-sm">
                         <div className="text-gray-500 text-xs uppercase font-bold mb-1">Total Trades</div>
                         <div className="text-2xl font-bold text-white font-mono">
-                            {viewMode === 'MANUAL' ? manualTotal : recentHistory.length}
+                            {filteredStats.total}
                         </div>
                     </div>
                     <div className="bg-[#151924] p-5 rounded-lg border border-[#2a2e39] shadow-sm">
                         <div className="text-gray-500 text-xs uppercase font-bold mb-1">Performance</div>
-                        <div className={`text-2xl font-bold font-mono ${viewMode === 'MANUAL' ? (manualPnL > 0 ? 'text-green-400' : 'text-gray-400') : (backtestStats.netPnL > 0 ? 'text-green-400' : 'text-gray-400')}`}>
-                             {viewMode === 'MANUAL' ? (manualPnL > 0 ? 'PROFITABLE' : 'NEUTRAL') : (backtestStats.netPnL > 0 ? 'PROFITABLE' : 'NEUTRAL')}
+                        <div className={`text-2xl font-bold font-mono ${filteredStats.pnl > 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                             {filteredStats.pnl > 0 ? 'PROFITABLE' : 'NEUTRAL'}
                         </div>
                     </div>
                  </div>
@@ -286,6 +290,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                         <th className="p-4 font-bold cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('type')}>
                                             Type <SortIcon column="type" />
                                         </th>
+                                        <th className="p-4 font-bold font-mono">Algo Signal</th>
                                         <th className="p-4 font-bold font-mono">TF</th>
                                         <th className="p-4 font-bold font-mono">Lot Size</th>
                                         <th className="p-4 font-bold font-mono cursor-pointer hover:bg-[#2a2e39]" onClick={() => handleSort('price')}>
@@ -317,6 +322,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ backtestStats, recentHis
                                                         {trade.type}
                                                     </span>
                                                 </td>
+                                                <td className="p-4 font-mono text-xs text-blue-400">{trade.algoSignal || '-'}</td>
                                                 <td className="p-4 font-mono text-xs text-gray-400">{trade.timeframe || '-'}</td>
                                                 <td className="p-4 font-mono text-xs text-gray-300">{(trade.lotSize || 0).toFixed(2)}</td>
                                                 <td className="p-4 font-mono text-xs text-white">{trade.price.toFixed(2)}</td>

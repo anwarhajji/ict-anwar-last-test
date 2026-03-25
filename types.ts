@@ -66,6 +66,7 @@ export interface TradeEntry {
     screenshots?: string[];
     mistakes?: string[];
     strategy?: string;
+    algoSignal?: string;
     timeframe?: string;
 }
 

@@ -1,17 +1,43 @@
 import React, { useState } from 'react';
-import { TradeEntry } from '../../types';
+import { EntrySignal, TradeEntry } from '../../types';
 
 interface JournalPanelProps {
     tradeHistory: TradeEntry[];
+    algoSignals?: EntrySignal[];
     onUpdateTrade: (updatedTrade: TradeEntry) => void;
 }
 
-export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpdateTrade }) => {
+export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSignals = [], onUpdateTrade }) => {
+    const [viewMode, setViewMode] = useState<'MANUAL' | 'ALGO'>('ALGO');
     const [selectedTrade, setSelectedTrade] = useState<TradeEntry | null>(null);
     const [notes, setNotes] = useState('');
     const [emotions, setEmotions] = useState('');
     const [tags, setTags] = useState('');
     const [mistakes, setMistakes] = useState('');
+    const [algoSignal, setAlgoSignal] = useState('');
+
+    const algoTrades: TradeEntry[] = algoSignals.map(signal => {
+        const existing = tradeHistory.find(t => t.id === `algo-${signal.time}`);
+        if (existing) return existing;
+        return {
+            id: `algo-${signal.time}`,
+            time: signal.time,
+            type: signal.type,
+            price: signal.price,
+            stopLoss: signal.sl,
+            takeProfit: signal.tp,
+            lotSize: signal.lotSize || 1,
+            result: signal.backtestResult === 'PENDING' ? 'OPEN' : signal.backtestResult,
+            pnl: signal.backtestPnL,
+            confluences: signal.confluences,
+            score: signal.score,
+            algoSignal: signal.setupName,
+            timeframe: signal.timeframe
+        };
+    });
+
+    const manualTrades = tradeHistory.filter(t => !t.id.startsWith('algo-'));
+    const displayedTrades = viewMode === 'MANUAL' ? manualTrades : algoTrades;
 
     const handleSelectTrade = (trade: TradeEntry) => {
         setSelectedTrade(trade);
@@ -19,6 +45,7 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
         setEmotions(trade.emotions?.join(', ') || '');
         setTags(trade.tags?.join(', ') || '');
         setMistakes(trade.mistakes?.join(', ') || '');
+        setAlgoSignal(trade.algoSignal || 'DEFAULT_ALGO');
     };
 
     const handleSave = () => {
@@ -26,6 +53,7 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
         const updated: TradeEntry = {
             ...selectedTrade,
             notes,
+            algoSignal,
             emotions: emotions.split(',').map(s => s.trim()).filter(Boolean),
             tags: tags.split(',').map(s => s.trim()).filter(Boolean),
             mistakes: mistakes.split(',').map(s => s.trim()).filter(Boolean),
@@ -37,10 +65,29 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
     return (
         <div className="flex h-full bg-[#0b0e11] text-white">
             {/* Trade List */}
-            <div className="w-1/3 border-r border-[#2a2e39] overflow-y-auto p-4">
-                <h2 className="text-xl font-bold mb-4">Trading Journal</h2>
-                <div className="space-y-2">
-                    {tradeHistory.map(trade => (
+            <div className="w-1/3 border-r border-[#2a2e39] overflow-y-auto p-4 flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">Trading Journal</h2>
+                </div>
+                
+                {/* View Toggle */}
+                <div className="flex bg-[#151924] rounded-lg p-1 mb-4 border border-[#2a2e39] shrink-0">
+                    <button 
+                        onClick={() => { setViewMode('ALGO'); setSelectedTrade(null); }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors ${viewMode === 'ALGO' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Algo Signals
+                    </button>
+                    <button 
+                        onClick={() => { setViewMode('MANUAL'); setSelectedTrade(null); }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors ${viewMode === 'MANUAL' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Paper Trades
+                    </button>
+                </div>
+
+                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+                    {displayedTrades.map(trade => (
                         <div 
                             key={trade.id} 
                             onClick={() => handleSelectTrade(trade)}
@@ -55,6 +102,11 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
                             <div className="text-xs text-gray-400">
                                 {new Date((trade.time as number) * 1000).toLocaleString()}
                             </div>
+                            {trade.algoSignal && (
+                                <div className="text-[10px] text-blue-400 font-bold mt-1 uppercase tracking-tighter">
+                                    {trade.algoSignal}
+                                </div>
+                            )}
                             {trade.tags && trade.tags.length > 0 && (
                                 <div className="flex gap-1 mt-2 flex-wrap">
                                     {trade.tags.map(t => <span key={t} className="bg-gray-800 text-xs px-1 rounded">{t}</span>)}
@@ -62,8 +114,10 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
                             )}
                         </div>
                     ))}
-                    {tradeHistory.length === 0 && (
-                        <div className="text-gray-500 text-center py-8">No trades in history.</div>
+                    {displayedTrades.length === 0 && (
+                        <div className="text-gray-500 text-center py-8">
+                            {viewMode === 'MANUAL' ? 'No paper trades in history.' : 'No algo signals available.'}
+                        </div>
                     )}
                 </div>
             </div>
@@ -94,6 +148,16 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, onUpda
                                     onChange={e => setNotes(e.target.value)}
                                     className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded p-3 text-white focus:border-blue-500 outline-none h-32"
                                     placeholder="Why did you take this trade? What happened?"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-400 mb-1">Algo Signal</label>
+                                <input 
+                                    type="text"
+                                    value={algoSignal}
+                                    onChange={e => setAlgoSignal(e.target.value)}
+                                    className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded p-2 text-white focus:border-blue-500 outline-none"
+                                    placeholder="e.g. Trend Follower v1"
                                 />
                             </div>
                             <div>

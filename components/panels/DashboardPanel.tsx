@@ -35,7 +35,8 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
     // --- CALCULATE MANUAL TRADING STATS (Real-time from Paper Trading) ---
     const manualStats = useMemo(() => {
-        const closedTrades = tradeHistory.filter(t => t.result !== 'OPEN');
+        const manualTrades = tradeHistory.filter(t => !t.id.startsWith('algo-'));
+        const closedTrades = manualTrades.filter(t => t.result !== 'OPEN');
         const wins = closedTrades.filter(t => t.result === 'WIN');
         const losses = closedTrades.filter(t => t.result === 'LOSS');
         const totalTrades = closedTrades.length;
@@ -79,7 +80,9 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
         let daily = 0, weekly = 0, monthly = 0;
 
-        tradeHistory.forEach(t => {
+        const manualTrades = tradeHistory.filter(t => !t.id.startsWith('algo-'));
+
+        manualTrades.forEach(t => {
             if (t.result === 'OPEN') return;
             const time = t.time as number;
             const pnl = t.pnl || 0;
@@ -95,7 +98,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
     // DECIDE WHICH STATS TO SHOW (Manual vs Backtest)
     // If user has manual trades, show those. Otherwise show Backtest.
-    const showManual = tradeHistory.length > 0;
+    const showManual = tradeHistory.filter(t => !t.id.startsWith('algo-')).length > 0;
     const activeStats = showManual ? manualStats : (backtestStats || {
         totalTrades: 0, wins: 0, losses: 0, winRate: 0, netPnL: 0, profitFactor: 0, maxDrawdown: 0, equityCurve: []
     });

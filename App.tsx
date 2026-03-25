@@ -904,8 +904,13 @@ const App: React.FC = () => {
                         ) : activeTab === 'JOURNAL' ? (
                             <JournalPanel 
                                 tradeHistory={tradeHistory} 
+                                algoSignals={recentHistory}
                                 onUpdateTrade={(updated) => {
-                                    setTradeHistory(prev => prev.map(t => t.id === updated.id ? updated : t));
+                                    setTradeHistory(prev => {
+                                        const exists = prev.find(t => t.id === updated.id);
+                                        if (exists) return prev.map(t => t.id === updated.id ? updated : t);
+                                        return [...prev, updated];
+                                    });
                                     updateTradeInFirebase(updated);
                                 }}
                             />

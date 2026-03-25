@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
 const configs = import.meta.glob('./firebase-applet-config.json', { eager: true });
-const firebaseAppletConfig: any = configs['./firebase-applet-config.json']?.default || {};
+const firebaseAppletConfig: any = (configs['./firebase-applet-config.json'] as any)?.default || {};
 
 // Use environment variables if provided, otherwise fallback to the applet config
 const firebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY ? {
