@@ -48,6 +48,7 @@
     - Système de "heartbeat" pour le tracking de l'activité utilisateur.
     - **Correction :** Fix de l'erreur "Failed to fetch candles" en ajoutant un mapping complet des symboles (NQ, ES, Gold, etc.) vers l'API Binance.
     - **Correction :** Fix de l'erreur "Cannot read properties of undefined (reading 'close')" en ajoutant des gardes sur les données vides dans `App.tsx`.
+    - **Correction :** Fix de "Manage Access" qui ne se mettait pas à jour en temps réel pour les utilisateurs en implémentant `onSnapshot` sur le profil utilisateur dans `App.tsx`.
 - **Blocages :** Aucun.
 - **Next :** Finaliser le module Journal (saisie manuelle) et brancher les vraies données sur le Dashboard.
 

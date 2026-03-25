@@ -20,8 +20,9 @@ import { ProfilePanel } from './components/panels/ProfilePanel';
 import { AdminPanel } from './components/panels/AdminPanel';
 import { BotsPanel } from './components/panels/BotsPanel';
 import { RiskPanel } from './components/panels/RiskPanel';
-import { auth, loginWithGoogle, logout } from './firebase';
+import { auth, loginWithGoogle, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc, setDoc, onSnapshot, collection, query, getDocs, updateDoc } from 'firebase/firestore';
 
 // Icons
 const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
@@ -86,25 +87,31 @@ const App: React.FC = () => {
     const [loginError, setLoginError] = useState<string | null>(null);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        let unsubscribeProfile: (() => void) | null = null;
+
+        const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
             setUser(currentUser);
+            
+            // Clean up previous profile listener
+            if (unsubscribeProfile) {
+                unsubscribeProfile();
+                unsubscribeProfile = null;
+            }
+
             if (currentUser) {
                 try {
-                    const { doc, getDoc, setDoc } = await import('firebase/firestore');
-                    const { db, handleFirestoreError, OperationType } = await import('./firebase');
                     const userRef = doc(db, `users/${currentUser.uid}`);
-                    const userSnap = await getDoc(userRef);
                     
+                    // One-time check/creation if profile doesn't exist
+                    const userSnap = await getDoc(userRef);
                     const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL || 'anwar.hajji@gmail.com';
                     const isSuperAdmin = currentUser.email === superAdminEmail;
 
                     if (userSnap.exists()) {
                         const data = userSnap.data() as UserProfile;
                         if (isSuperAdmin && data.role !== 'SUPER_ADMIN') {
-                            data.role = 'SUPER_ADMIN';
                             await setDoc(userRef, { role: 'SUPER_ADMIN' }, { merge: true });
                         }
-                        setUserProfile(data);
                     } else {
                         // Create default profile
                         const defaultProfile: UserProfile = {
@@ -128,8 +135,18 @@ const App: React.FC = () => {
                             }
                         };
                         await setDoc(userRef, defaultProfile, { merge: true });
-                        setUserProfile(defaultProfile);
                     }
+
+                    // Set up real-time listener for the profile
+                    unsubscribeProfile = onSnapshot(userRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            setUserProfile(snapshot.data() as UserProfile);
+                        }
+                    }, (error) => {
+                        console.error("Error listening to user profile:", error);
+                        handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+                    });
+
                 } catch (e) {
                     console.error("Failed to fetch user profile", e);
                 }
@@ -138,15 +155,17 @@ const App: React.FC = () => {
             }
             setIsAuthReady(true);
         });
-        return () => unsubscribe();
+
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeProfile) unsubscribeProfile();
+        };
     }, []);
 
     // --- HEARTBEAT (ONLINE STATUS) ---
     useEffect(() => {
         if (!user || !userProfile?.uid) return;
         const updatePresence = async () => {
-            const { doc, updateDoc } = await import('firebase/firestore');
-            const { db } = await import('./firebase');
             try {
                 await updateDoc(doc(db, `users/${user.uid}`), {
                     lastActive: Date.now()
@@ -160,8 +179,6 @@ const App: React.FC = () => {
 
     const handleSelectTier = async (tier: 'NORMAL' | 'VIP' | 'VVIP') => {
         if (!user || !userProfile) return;
-        const { doc, updateDoc } = await import('firebase/firestore');
-        const { db } = await import('./firebase');
         try {
             await updateDoc(doc(db, `users/${user.uid}`), {
                 requestedTier: tier,
@@ -267,68 +284,59 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!user || !isAuthReady) return;
         
-        // Dynamic import to avoid loading Firebase if not needed
-        import('firebase/firestore').then(({ collection, query, getDocs, doc, getDoc, setDoc }) => {
-            import('./firebase').then(({ db, handleFirestoreError, OperationType }) => {
-                const fetchTrades = async () => {
-                    try {
-                        const tradesRef = collection(db, `users/${user.uid}/trades`);
-                        const q = query(tradesRef);
-                        const querySnapshot = await getDocs(q);
-                        
-                        if (!querySnapshot.empty) {
-                            const fetchedTrades: TradeEntry[] = [];
-                            querySnapshot.forEach((doc) => {
-                                fetchedTrades.push(doc.data() as TradeEntry);
-                            });
-                            
-                            // Sort by time descending
-                            fetchedTrades.sort((a, b) => (b.time as number) - (a.time as number));
-                            setTradeHistory(fetchedTrades);
-                        }
-                    } catch (error) {
-                        handleFirestoreError(error, OperationType.GET, `users/${user.uid}/trades`);
-                    }
-                };
-
-                const fetchUserData = async () => {
-                    try {
-                        const userRef = doc(db, `users/${user.uid}`);
-                        const userSnap = await getDoc(userRef);
-                        
-                        if (userSnap.exists()) {
-                            const data = userSnap.data();
-                            if (data.balance !== undefined) setBalance(data.balance);
-                            if (data.positions !== undefined) setPositions(data.positions);
-                        }
-                    } catch (error) {
-                        handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-                    }
-                };
+        const fetchTrades = async () => {
+            try {
+                const tradesRef = collection(db, `users/${user.uid}/trades`);
+                const q = query(tradesRef);
+                const querySnapshot = await getDocs(q);
                 
-                fetchTrades();
-                fetchUserData();
-            });
-        });
+                if (!querySnapshot.empty) {
+                    const fetchedTrades: TradeEntry[] = [];
+                    querySnapshot.forEach((doc) => {
+                        fetchedTrades.push(doc.data() as TradeEntry);
+                    });
+                    
+                    // Sort by time descending
+                    fetchedTrades.sort((a, b) => (b.time as number) - (a.time as number));
+                    setTradeHistory(fetchedTrades);
+                }
+            } catch (error) {
+                handleFirestoreError(error, OperationType.GET, `users/${user.uid}/trades`);
+            }
+        };
+
+        const fetchUserData = async () => {
+            try {
+                const userRef = doc(db, `users/${user.uid}`);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    if (data.balance !== undefined) setBalance(data.balance);
+                    if (data.positions !== undefined) setPositions(data.positions);
+                }
+            } catch (error) {
+                handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+            }
+        };
+        
+        fetchTrades();
+        fetchUserData();
     }, [user, isAuthReady]);
 
     // Save balance and positions to Firebase when they change
     useEffect(() => {
         if (!user) return;
         
-        import('firebase/firestore').then(({ doc, setDoc }) => {
-            import('./firebase').then(({ db, handleFirestoreError, OperationType }) => {
-                const saveUserData = async () => {
-                    try {
-                        const userRef = doc(db, `users/${user.uid}`);
-                        await setDoc(userRef, { balance, positions }, { merge: true });
-                    } catch (error) {
-                        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-                    }
-                };
-                saveUserData();
-            });
-        });
+        const saveUserData = async () => {
+            try {
+                const userRef = doc(db, `users/${user.uid}`);
+                await setDoc(userRef, { balance, positions }, { merge: true });
+            } catch (error) {
+                handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+            }
+        };
+        saveUserData();
     }, [balance, positions, user]);
 
     // Save trade to Firebase when closed
@@ -336,15 +344,10 @@ const App: React.FC = () => {
         if (!user) return;
         
         try {
-            const { doc, setDoc } = await import('firebase/firestore');
-            const { db, handleFirestoreError, OperationType } = await import('./firebase');
-            
             const tradeRef = doc(db, `users/${user.uid}/trades`, trade.id);
             await setDoc(tradeRef, trade);
         } catch (error) {
-            import('./firebase').then(({ handleFirestoreError, OperationType }) => {
-                handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/trades/${trade.id}`);
-            });
+            handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/trades/${trade.id}`);
         }
     };
 
@@ -353,16 +356,11 @@ const App: React.FC = () => {
         if (!user) return;
         
         try {
-            const { doc, setDoc } = await import('firebase/firestore');
-            const { db, handleFirestoreError, OperationType } = await import('./firebase');
-            
             const tradeRef = doc(db, `users/${user.uid}/trades`, trade.id);
             // Use setDoc with merge: true to update existing or create if not exists
             await setDoc(tradeRef, trade, { merge: true });
         } catch (error) {
-            import('./firebase').then(({ handleFirestoreError, OperationType }) => {
-                handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/trades/${trade.id}`);
-            });
+            handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/trades/${trade.id}`);
         }
     };
     
@@ -1131,11 +1129,8 @@ const App: React.FC = () => {
                                 onLogout={logout} 
                                 onUpdateProfile={async (updated) => {
                                     if (!user) return;
-                                    const { doc, setDoc } = await import('firebase/firestore');
-                                    const { db } = await import('./firebase');
                                     const userRef = doc(db, `users/${user.uid}`);
                                     await setDoc(userRef, updated, { merge: true });
-                                    setUserProfile(updated);
                                 }}
                             />
                         ) : activeTab === 'ADMIN' ? (

@@ -24,6 +24,7 @@
 - **Firebase :** Correction de la récupération des stratégies personnalisées après le premier chargement.
 - **Chart Data :** Correction de l'erreur "Failed to fetch candles" en ajoutant un mapping complet des symboles (NQ, ES, Gold, etc.) vers l'API Binance.
 - **Chart Stability :** Correction de l'erreur "Cannot read properties of undefined (reading 'close')" en ajoutant des gardes sur les données vides dans `App.tsx`.
+- **Real-time Access :** Correction du système de gestion d'accès en implémentant `onSnapshot` sur le profil utilisateur, permettant aux changements effectués par l'admin d'être appliqués instantanément sans rafraîchissement.
 
 ### Security
 - **Firestore Rules :** Mise à jour des règles pour protéger les données de bots et stratégies par utilisateur.
