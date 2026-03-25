@@ -62,6 +62,25 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
         setSelectedTrade(updated);
     };
 
+    const handleConvertToTrade = () => {
+        if (!selectedTrade) return;
+        
+        // Create a new manual trade from this algo signal
+        const newTrade: TradeEntry = {
+            ...selectedTrade,
+            id: Date.now().toString(), // New ID without 'algo-' prefix
+            notes: notes || 'Converted from Algo Signal',
+            algoSignal: algoSignal || selectedTrade.algoSignal,
+            emotions: emotions.split(',').map(s => s.trim()).filter(Boolean),
+            tags: tags.split(',').map(s => s.trim()).filter(Boolean),
+            mistakes: mistakes.split(',').map(s => s.trim()).filter(Boolean),
+        };
+        
+        onUpdateTrade(newTrade);
+        setViewMode('MANUAL');
+        setSelectedTrade(newTrade);
+    };
+
     return (
         <div className="flex h-full bg-[#0b0e11] text-white">
             {/* Trade List */}
@@ -191,12 +210,22 @@ export const JournalPanel: React.FC<JournalPanelProps> = ({ tradeHistory, algoSi
                                 />
                             </div>
                             
-                            <button 
-                                onClick={handleSave}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition-colors mt-4"
-                            >
-                                Save Journal Entry
-                            </button>
+                            <div className="flex gap-4 mt-4">
+                                <button 
+                                    onClick={handleSave}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition-colors"
+                                >
+                                    Save Journal Entry
+                                </button>
+                                {viewMode === 'ALGO' && (
+                                    <button 
+                                        onClick={handleConvertToTrade}
+                                        className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded transition-colors"
+                                    >
+                                        Convert to Paper Trade
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 ) : (
