@@ -10,7 +10,12 @@
 ## 2) Modules
 ### A) Auth & SaaS (MVP)
 - Authentification via Firebase Auth (Google Login).
-- Gestion des rôles (Admin, Member).
+- Gestion des rôles (Admin, Member, Super Admin).
+- Système de Tiers (FREE, NORMAL, VIP, VVIP) avec restrictions de fonctionnalités.
+- Onboarding : Choix du compte à la première connexion.
+- Validation Admin : Les comptes payants (Normal/VIP/VVIP) nécessitent une validation manuelle.
+- Admin Panel : Gestion complète des utilisateurs (Approbation, Suspension, Changement de Tier/Rôle, Overrides de features).
+- Heartbeat : Suivi de l'activité en temps réel (En ligne / Absent).
 - Quotas de bots et d'historique selon le plan.
 
 ### B) Intégration Broker (Phase 1)

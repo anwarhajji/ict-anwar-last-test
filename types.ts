@@ -267,7 +267,11 @@ export interface UserProfile {
     lastName?: string;
     role: 'SUPER_ADMIN' | 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
     workspaceId: string;
-    plan: 'FREE' | 'PRO' | 'ELITE';
+    plan: 'FREE' | 'PRO' | 'ELITE'; // Legacy
+    tier?: 'FREE' | 'NORMAL' | 'VIP' | 'VVIP';
+    requestedTier?: 'NORMAL' | 'VIP' | 'VVIP';
+    status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+    lastActive?: number;
     createdAt: string;
     lastLogin: string;
     features?: UserFeatures;

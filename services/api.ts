@@ -10,22 +10,36 @@ export const getHtf = (tf: string) => {
 };
 
 export const fetchCandles = async (asset: string, timeframe: string, limit: number = 1500): Promise<CandleData[]> => {
-    let symbol = asset;
-    if (asset === 'XAUUSD.P' || asset === 'GOLD' || asset.includes('MGC')) symbol = 'PAXGUSDT'; 
+    const symbolMap: { [key: string]: string } = {
+        'NQ (CME)': 'BTCUSDT', // Proxy for Nasdaq
+        'ES (CME)': 'ETHUSDT', // Proxy for S&P
+        'MGC (COMEX)': 'PAXGUSDT',
+        'XAUUSD': 'PAXGUSDT',
+        'GOLD': 'PAXGUSDT',
+        'XAUUSD.P': 'PAXGUSDT'
+    };
+    
+    let symbol = symbolMap[asset] || asset.replace('/', '').replace(' ', '');
+    if (asset.includes('MGC')) symbol = 'PAXGUSDT';
 
     try {
         const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=${limit}`);
         if (!res.ok) {
-            console.warn(`API Error for ${symbol} ${timeframe}: ${res.statusText}`);
+            const errorData = await res.json().catch(() => ({}));
+            if (errorData.code === -1121) {
+                console.warn(`Symbol ${symbol} not found on Binance. Returning empty data.`);
+            } else {
+                console.warn(`Binance API error for ${symbol}:`, errorData);
+            }
             return [];
         }
         const raw = await res.json();
+        
         if (!Array.isArray(raw)) {
-            // Fallback or empty return if API fails (e.g., rate limit)
-            console.warn(`API Error for ${symbol} ${timeframe}`);
+            console.warn(`Invalid response format from Binance for ${symbol}:`, raw);
             return [];
         }
-        
+
         return raw.map((c: any) => ({ 
             time: c[0] / 1000 as UTCTimestamp, 
             open: parseFloat(c[1]), 
@@ -34,7 +48,12 @@ export const fetchCandles = async (asset: string, timeframe: string, limit: numb
             close: parseFloat(c[4]) 
         }));
     } catch (error) {
-        console.error(`Failed to fetch candles for ${symbol}:`, error);
+        // Only log actual network errors, not 404s which we handle above
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            console.error(`Network error fetching candles for ${symbol}. Check your connection.`);
+        } else {
+            console.error(`Unexpected error fetching candles for ${symbol}:`, error);
+        }
         return [];
     }
 };

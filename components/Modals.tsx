@@ -209,6 +209,64 @@ export const EntryDetailModal = ({ entry, onClose, onReplay }: { entry: EntrySig
     );
 };
 
+export const OnboardingModal = ({ onSelectTier }: { onSelectTier: (tier: 'NORMAL' | 'VIP' | 'VVIP') => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-[#151924] border border-[#2a2e39] rounded-xl w-full max-w-4xl p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
+                <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold text-white mb-2">Welcome to <span className="text-blue-500">ICT</span>MASTER</h2>
+                    <p className="text-gray-400">To get started, please select the type of account you wish to open. Your request will be reviewed by an administrator.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* NORMAL */}
+                    <div className="bg-[#0b0e11] border border-gray-700 rounded-lg p-6 flex flex-col hover:border-blue-500 transition-colors cursor-pointer" onClick={() => onSelectTier('NORMAL')}>
+                        <div className="text-blue-400 font-bold text-xl mb-2">NORMAL</div>
+                        <div className="text-sm text-gray-400 mb-6 flex-1">Perfect for beginners starting their trading journey.</div>
+                        <ul className="text-sm text-gray-300 space-y-3 mb-8">
+                            <li className="flex items-center gap-2">✅ Paper Trading</li>
+                            <li className="flex items-center gap-2">✅ Basic Journal</li>
+                            <li className="flex items-center gap-2">✅ Basic Bots Access</li>
+                            <li className="flex items-center gap-2 opacity-50">❌ Economic News</li>
+                            <li className="flex items-center gap-2 opacity-50">❌ Backtesting Replay</li>
+                        </ul>
+                        <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded transition-colors">Select Normal</button>
+                    </div>
+
+                    {/* VIP */}
+                    <div className="bg-[#0b0e11] border border-purple-500/50 rounded-lg p-6 flex flex-col hover:border-purple-500 transition-colors cursor-pointer relative shadow-[0_0_15px_rgba(168,85,247,0.1)]" onClick={() => onSelectTier('VIP')}>
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Most Popular</div>
+                        <div className="text-purple-400 font-bold text-xl mb-2">VIP</div>
+                        <div className="text-sm text-gray-400 mb-6 flex-1">For advanced traders who need more tools and data.</div>
+                        <ul className="text-sm text-gray-300 space-y-3 mb-8">
+                            <li className="flex items-center gap-2">✅ Live Broker Sync</li>
+                            <li className="flex items-center gap-2">✅ Advanced Journal</li>
+                            <li className="flex items-center gap-2">✅ All Standard Bots</li>
+                            <li className="flex items-center gap-2">✅ Economic News</li>
+                            <li className="flex items-center gap-2">✅ Backtesting Replay</li>
+                        </ul>
+                        <button className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded transition-colors">Select VIP</button>
+                    </div>
+
+                    {/* VVIP */}
+                    <div className="bg-[#0b0e11] border border-yellow-500/50 rounded-lg p-6 flex flex-col hover:border-yellow-500 transition-colors cursor-pointer relative shadow-[0_0_15px_rgba(234,179,8,0.1)]" onClick={() => onSelectTier('VVIP')}>
+                        <div className="text-yellow-400 font-bold text-xl mb-2">VVIP</div>
+                        <div className="text-sm text-gray-400 mb-6 flex-1">Institutional grade tools and unlimited access.</div>
+                        <ul className="text-sm text-gray-300 space-y-3 mb-8">
+                            <li className="flex items-center gap-2">✅ Everything in VIP</li>
+                            <li className="flex items-center gap-2">✅ Premium Private Bots</li>
+                            <li className="flex items-center gap-2">✅ Unlimited Bots Creation</li>
+                            <li className="flex items-center gap-2">✅ Risk Guardrails</li>
+                            <li className="flex items-center gap-2">✅ Deep Scanner</li>
+                        </ul>
+                        <button className="w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-black font-bold rounded transition-colors">Select VVIP</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const TopSetupsModal = ({ entries, onClose }: { entries: EntrySignal[], onClose: () => void }) => {
     const topSetups = useMemo(() => {
         return [...entries].sort((a, b) => b.score - a.score).slice(0, 3);

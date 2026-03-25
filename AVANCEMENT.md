@@ -38,6 +38,19 @@
 - [x] Checklists quotidiennes (Tasks).
 - [x] Suivi de la discipline journalière.
 
+## Journal Quotidien (25/03/2026)
+- **Fait :**
+    - Implémentation du système de Tiers (FREE, NORMAL, VIP, VVIP).
+    - Création de l'OnboardingModal pour les nouveaux utilisateurs (choix du compte).
+    - Ajout du système de "Pending Approval" et de la fonction `hasAccess`.
+    - Création de l'Admin Panel pour gérer les utilisateurs et valider les accès.
+    - Mise à jour de la navigation (Sidebar & Mobile) pour respecter les permissions et afficher les verrous.
+    - Système de "heartbeat" pour le tracking de l'activité utilisateur.
+    - **Correction :** Fix de l'erreur "Failed to fetch candles" en ajoutant un mapping complet des symboles (NQ, ES, Gold, etc.) vers l'API Binance.
+    - **Correction :** Fix de l'erreur "Cannot read properties of undefined (reading 'close')" en ajoutant des gardes sur les données vides dans `App.tsx`.
+- **Blocages :** Aucun.
+- **Next :** Finaliser le module Journal (saisie manuelle) et brancher les vraies données sur le Dashboard.
+
 ## Journal Quotidien (24/03/2026)
 - **Fait :**
     - Création du module `BotsPanel` avec éditeur de stratégies JavaScript.

@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade, BiasMatrix, BiasState, UserProfile } from './types';
+import { CandleData, OrderBlock, FVG, StructurePoint, EntrySignal, BacktestStats, TradeEntry, UTCTimestamp, SimulationConfig, ICTSetupType, OverlayState, DraftTrade, BiasMatrix, BiasState, UserProfile, UserFeatures } from './types';
 import { fetchCandles, getHtf } from './services/api';
 import { detectStructure, detectOrderBlocks, detectFVG, detectEntries, calculateBias, getSession } from './services/ict';
 import { performBacktest } from './services/backtest';
 import { ChartComponent } from './components/Chart';
-import { EntryDetailModal, TopSetupsModal, ToastNotification, ErrorBoundary } from './components/Modals';
+import { EntryDetailModal, TopSetupsModal, ToastNotification, ErrorBoundary, OnboardingModal } from './components/Modals';
 import { Panels } from './components/Panels';
 import { DashboardPanel } from './components/panels/DashboardPanel';
 import { StatsPanel } from './components/panels/StatsPanel';
@@ -48,21 +48,31 @@ const SidebarItem = ({
     active, 
     onClick, 
     icon, 
-    label 
+    label,
+    locked = false
 }: { 
     active: boolean; 
     onClick: () => void; 
     icon: React.ReactNode; 
-    label: string 
+    label: string;
+    locked?: boolean;
 }) => (
     <button 
         onClick={onClick} 
         className={`group relative w-full p-3 flex flex-col items-center gap-1 transition-colors ${active ? 'text-blue-500 bg-gray-800/50 border-r-2 border-blue-500' : 'text-gray-500 hover:text-white hover:bg-gray-800/30'}`}
     >
-        {icon}
+        <div className="relative">
+            {icon}
+            {locked && (
+                <div className="absolute -top-1 -right-1 bg-gray-900 rounded-full p-0.5 border border-gray-700">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </div>
+            )}
+        </div>
         {/* Tooltip */}
-        <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl border border-gray-700">
+        <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl border border-gray-700 flex items-center gap-2">
             {label}
+            {locked && <span className="text-[10px] text-yellow-500 font-bold uppercase">Locked</span>}
         </span>
     </button>
 );
@@ -104,14 +114,17 @@ const App: React.FC = () => {
                             role: isSuperAdmin ? 'SUPER_ADMIN' : 'MEMBER',
                             workspaceId: 'default',
                             plan: 'FREE',
+                            tier: 'FREE',
+                            status: 'PENDING',
+                            lastActive: Date.now(),
                             createdAt: new Date().toISOString(),
                             lastLogin: new Date().toISOString(),
                             features: {
                                 bots: false,
-                                backtesting: true,
-                                news: true,
-                                tasks: true,
-                                analytics: true
+                                backtesting: false,
+                                news: false,
+                                tasks: false,
+                                analytics: false
                             }
                         };
                         await setDoc(userRef, defaultProfile, { merge: true });
@@ -127,6 +140,38 @@ const App: React.FC = () => {
         });
         return () => unsubscribe();
     }, []);
+
+    // --- HEARTBEAT (ONLINE STATUS) ---
+    useEffect(() => {
+        if (!user || !userProfile?.uid) return;
+        const updatePresence = async () => {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const { db } = await import('./firebase');
+            try {
+                await updateDoc(doc(db, `users/${user.uid}`), {
+                    lastActive: Date.now()
+                });
+            } catch (e) { console.error("Failed to update presence", e); }
+        };
+        updatePresence(); // Initial call
+        const interval = setInterval(updatePresence, 60000); // Every minute
+        return () => clearInterval(interval);
+    }, [user, userProfile?.uid]);
+
+    const handleSelectTier = async (tier: 'NORMAL' | 'VIP' | 'VVIP') => {
+        if (!user || !userProfile) return;
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('./firebase');
+        try {
+            await updateDoc(doc(db, `users/${user.uid}`), {
+                requestedTier: tier,
+                status: 'PENDING'
+            });
+            setUserProfile({ ...userProfile, requestedTier: tier, status: 'PENDING' });
+        } catch (e) {
+            console.error("Failed to request tier", e);
+        }
+    };
 
     const handleLogin = async () => {
         if (isLoggingIn) return;
@@ -433,6 +478,11 @@ const App: React.FC = () => {
             // 1. MAIN DATA
             const candles = await fetchCandles(asset, timeframe);
             
+            if (!candles || candles.length === 0) {
+                console.warn(`No candles returned for ${asset} on ${timeframe}`);
+                return;
+            }
+
             // 2. HTF DATA FOR CONTEXT (1D, 1W, 1M for Bias)
             // Fetch these in parallel for performance
             const [candles1M, candles1W, candles1D] = await Promise.all([
@@ -685,6 +735,40 @@ const App: React.FC = () => {
     const isSidebarPanelOpen = !['DASHBOARD', 'CHART', 'BACKTEST', 'STATS', 'SETUPS', 'TRADING'].includes(activeTab);
     const safeStats = backtestStats || {totalTrades:0, wins:0, losses:0, winRate:0, netPnL:0, profitFactor:0, maxDrawdown:0, equityCurve:[]};
 
+    const hasAccess = (feature: string) => {
+        if (!userProfile) return false;
+        if (userProfile.role === 'SUPER_ADMIN' || userProfile.role === 'OWNER') return true;
+        
+        const f = feature.toLowerCase() as keyof UserFeatures;
+        if (userProfile.features?.[f] === true) return true;
+        if (userProfile.features?.[f] === false) return false;
+
+        const tier = userProfile.tier || 'FREE';
+        const status = userProfile.status || 'PENDING';
+
+        if (status === 'PENDING' || status === 'SUSPENDED') {
+            return ['ANALYTICS', 'DASHBOARD', 'STATS'].includes(feature);
+        }
+
+        if (tier === 'FREE') {
+            return ['ANALYTICS', 'DASHBOARD', 'STATS'].includes(feature);
+        }
+
+        if (tier === 'NORMAL') {
+            return ['TRADING', 'JOURNAL', 'TASKS', 'SCANNER', 'ANALYTICS', 'DASHBOARD', 'STATS', 'SETUPS'].includes(feature);
+        }
+
+        if (tier === 'VIP') {
+            return ['TRADING', 'JOURNAL', 'TASKS', 'SCANNER', 'ANALYTICS', 'DASHBOARD', 'STATS', 'SETUPS', 'NEWS', 'BACKTEST', 'BOTS'].includes(feature);
+        }
+
+        if (tier === 'VVIP') {
+            return true;
+        }
+
+        return false;
+    };
+
     const FeatureLocked = ({ featureName }: { featureName: string }) => (
         <div className="flex flex-col items-center justify-center h-full bg-[#0b0e11] text-gray-400 p-8 text-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 text-gray-600">
@@ -748,6 +832,19 @@ const App: React.FC = () => {
             {showTopSetups && <TopSetupsModal entries={entries} onClose={() => setShowTopSetups(false)} />}
             {clickedEntry && <EntryDetailModal entry={clickedEntry} onClose={() => setClickedEntry(null)} onReplay={() => handleStartReplay(clickedEntry)} />}
 
+            {/* ONBOARDING MODAL */}
+            {userProfile && !userProfile.requestedTier && userProfile.role !== 'SUPER_ADMIN' && userProfile.role !== 'OWNER' && (
+                <OnboardingModal onSelectTier={handleSelectTier} />
+            )}
+
+            {/* PENDING BANNER */}
+            {userProfile?.status === 'PENDING' && (
+                <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-400 text-xs md:text-sm font-bold px-4 py-2 text-center z-[60] flex items-center justify-center gap-2">
+                    <span className="animate-pulse">⏳</span> 
+                    Your request for the {userProfile.requestedTier || 'VIP'} account is currently pending review by an administrator. Some features are restricted.
+                </div>
+            )}
+
             {/* TOP BAR */}
             <header className="h-14 bg-[#151924] border-b border-[#2a2e39] flex items-center justify-between px-4 shrink-0 z-50">
                 <div className="flex items-center gap-4">
@@ -792,17 +889,17 @@ const App: React.FC = () => {
                 <nav className="w-16 bg-[#151924] border-r border-[#2a2e39] hidden md:flex flex-col items-center py-4 gap-2 z-40 overflow-y-auto scrollbar-hide">
                     <SidebarItem active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<DashboardIcon/>} label="Dashboard" />
                     <SidebarItem active={activeTab === 'CHART'} onClick={() => setActiveTab('CHART')} icon={<ChartIcon/>} label="Chart" />
-                    <SidebarItem active={activeTab === 'TRADING'} onClick={() => setActiveTab('TRADING')} icon={<TradeIcon/>} label="Paper Trading" />
-                    <SidebarItem active={activeTab === 'JOURNAL'} onClick={() => setActiveTab('JOURNAL')} icon={<JournalIcon/>} label="Journal" />
-                    <SidebarItem active={activeTab === 'TASKS'} onClick={() => setActiveTab('TASKS')} icon={<TasksIcon/>} label="Daily Tasks" />
-                    <SidebarItem active={activeTab === 'NEWS'} onClick={() => setActiveTab('NEWS')} icon={<NewsIcon/>} label="News" />
-                    <SidebarItem active={activeTab === 'BROKER'} onClick={() => setActiveTab('BROKER')} icon={<BrokerIcon/>} label="Broker Sync" />
-                    <SidebarItem active={activeTab === 'STATS'} onClick={() => setActiveTab('STATS')} icon={<StatsIcon/>} label="Trade History" />
-                    <SidebarItem active={activeTab === 'SCANNER'} onClick={() => setActiveTab('SCANNER')} icon={<ListIcon/>} label="Scanner" />
-                    <SidebarItem active={activeTab === 'BACKTEST'} onClick={() => setActiveTab('BACKTEST')} icon={<BacktestIcon/>} label="Replay / Backtest" />
-                    <SidebarItem active={activeTab === 'SETUPS'} onClick={() => setActiveTab('SETUPS')} icon={<SetupsIcon/>} label="ICT Models" />
-                    <SidebarItem active={activeTab === 'BOTS'} onClick={() => setActiveTab('BOTS')} icon={<BotsIcon/>} label="Auto Bots" />
-                    <SidebarItem active={activeTab === 'RISK'} onClick={() => setActiveTab('RISK')} icon={<RiskIcon/>} label="Risk Guardrails" />
+                    <SidebarItem active={activeTab === 'TRADING'} onClick={() => setActiveTab('TRADING')} icon={<TradeIcon/>} label="Paper Trading" locked={!hasAccess('TRADING')} />
+                    <SidebarItem active={activeTab === 'JOURNAL'} onClick={() => setActiveTab('JOURNAL')} icon={<JournalIcon/>} label="Journal" locked={!hasAccess('JOURNAL')} />
+                    <SidebarItem active={activeTab === 'TASKS'} onClick={() => setActiveTab('TASKS')} icon={<TasksIcon/>} label="Daily Tasks" locked={!hasAccess('TASKS')} />
+                    <SidebarItem active={activeTab === 'NEWS'} onClick={() => setActiveTab('NEWS')} icon={<NewsIcon/>} label="News" locked={!hasAccess('NEWS')} />
+                    <SidebarItem active={activeTab === 'BROKER'} onClick={() => setActiveTab('BROKER')} icon={<BrokerIcon/>} label="Broker Sync" locked={!hasAccess('TRADING')} />
+                    <SidebarItem active={activeTab === 'STATS'} onClick={() => setActiveTab('STATS')} icon={<StatsIcon/>} label="Trade History" locked={!hasAccess('STATS')} />
+                    <SidebarItem active={activeTab === 'SCANNER'} onClick={() => setActiveTab('SCANNER')} icon={<ListIcon/>} label="Scanner" locked={!hasAccess('SCANNER')} />
+                    <SidebarItem active={activeTab === 'BACKTEST'} onClick={() => setActiveTab('BACKTEST')} icon={<BacktestIcon/>} label="Replay / Backtest" locked={!hasAccess('BACKTEST')} />
+                    <SidebarItem active={activeTab === 'SETUPS'} onClick={() => setActiveTab('SETUPS')} icon={<SetupsIcon/>} label="ICT Models" locked={!hasAccess('SETUPS')} />
+                    <SidebarItem active={activeTab === 'BOTS'} onClick={() => setActiveTab('BOTS')} icon={<BotsIcon/>} label="Auto Bots" locked={!hasAccess('BOTS')} />
+                    <SidebarItem active={activeTab === 'RISK'} onClick={() => setActiveTab('RISK')} icon={<RiskIcon/>} label="Risk Guardrails" locked={!hasAccess('TRADING')} />
                     <div className="flex-1"></div>
                     {(userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN') && (
                         <SidebarItem active={activeTab === 'ADMIN'} onClick={() => setActiveTab('ADMIN')} icon={<AdminIcon/>} label="Admin" />
@@ -821,11 +918,40 @@ const App: React.FC = () => {
                             </button>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            {['DASHBOARD', 'CHART', 'TRADING', 'JOURNAL', 'TASKS', 'NEWS', 'BROKER', 'STATS', 'SCANNER', 'BACKTEST', 'SETUPS', 'BOTS', 'RISK', ...(userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN' ? ['ADMIN'] : []), 'PROFILE', 'SETTINGS'].map(tab => (
-                                <button key={tab} onClick={() => { setActiveTab(tab); setMobileMenuOpen(false); }} className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${activeTab === tab ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}>
-                                    <span className="text-sm font-bold">{tab}</span>
-                                </button>
-                            ))}
+                            {[
+                                { id: 'DASHBOARD', label: 'Dashboard' },
+                                { id: 'CHART', label: 'Chart' },
+                                { id: 'TRADING', label: 'Trading' },
+                                { id: 'JOURNAL', label: 'Journal' },
+                                { id: 'TASKS', label: 'Tasks' },
+                                { id: 'NEWS', label: 'News' },
+                                { id: 'BROKER', label: 'Broker' },
+                                { id: 'STATS', label: 'Stats' },
+                                { id: 'SCANNER', label: 'Scanner' },
+                                { id: 'BACKTEST', label: 'Backtest' },
+                                { id: 'SETUPS', label: 'Setups' },
+                                { id: 'BOTS', label: 'Bots' },
+                                { id: 'RISK', label: 'Risk' },
+                                ...(userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN' ? [{ id: 'ADMIN', label: 'Admin' }] : []),
+                                { id: 'PROFILE', label: 'Profile' },
+                                { id: 'SETTINGS', label: 'Settings' }
+                            ].map(tab => {
+                                const locked = !['DASHBOARD', 'CHART', 'PROFILE', 'SETTINGS', 'ADMIN'].includes(tab.id) && !hasAccess(tab.id);
+                                return (
+                                    <button 
+                                        key={tab.id} 
+                                        onClick={() => { setActiveTab(tab.id); setMobileMenuOpen(false); }} 
+                                        className={`p-4 rounded-lg border flex flex-col items-center gap-2 relative ${activeTab === tab.id ? 'bg-blue-900/20 border-blue-500 text-blue-400' : 'bg-[#0b0e11] border-[#2a2e39] text-gray-400'}`}
+                                    >
+                                        <span className="text-sm font-bold">{tab.label}</span>
+                                        {locked && (
+                                            <div className="absolute top-2 right-2 text-yellow-500">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -926,10 +1052,11 @@ const App: React.FC = () => {
                                 }}
                             />
                         ) : activeTab === 'TASKS' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.tasks === false) ? <FeatureLocked featureName="Daily Tasks" /> : <TasksPanel />
+                            !hasAccess('TASKS') ? <FeatureLocked featureName="Daily Tasks" /> : <TasksPanel />
                         ) : activeTab === 'NEWS' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.news === false) ? <FeatureLocked featureName="News" /> : <NewsPanel />
+                            !hasAccess('NEWS') ? <FeatureLocked featureName="News" /> : <NewsPanel />
                         ) : activeTab === 'BROKER' ? (
+                            !hasAccess('TRADING') ? <FeatureLocked featureName="Broker Sync" /> :
                             <BrokerPanel 
                                 onImportTrades={(newTrades) => {
                                     setTradeHistory(prev => [...prev, ...newTrades]);
@@ -937,7 +1064,7 @@ const App: React.FC = () => {
                                 }} 
                             />
                         ) : activeTab === 'STATS' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.analytics === false) ? <FeatureLocked featureName="Analytics & Stats" /> :
+                            !hasAccess('STATS') ? <FeatureLocked featureName="Analytics & Stats" /> :
                             <StatsPanel 
                                 backtestStats={safeStats} 
                                 recentHistory={recentHistory}
@@ -948,6 +1075,7 @@ const App: React.FC = () => {
                                 onReplay={handleStartReplay}
                             />
                         ) : activeTab === 'SETUPS' ? (
+                            !hasAccess('SETUPS') ? <FeatureLocked featureName="Top Setups" /> :
                             <SetupsPanel 
                                 entries={entries} 
                                 setClickedEntry={setClickedEntry} 
@@ -957,6 +1085,7 @@ const App: React.FC = () => {
                                 onViewOnChart={handleViewOnChart}
                             />
                         ) : activeTab === 'SCANNER' ? (
+                            !hasAccess('SCANNER') ? <FeatureLocked featureName="Scanner" /> :
                             <div className="h-full bg-[#151924]">
                                 <ScannerPanel 
                                     structure={structure} 
@@ -973,7 +1102,7 @@ const App: React.FC = () => {
                                 />
                             </div>
                         ) : activeTab === 'BACKTEST' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.backtesting === false) ? <FeatureLocked featureName="Backtesting" /> :
+                            !hasAccess('BACKTEST') ? <FeatureLocked featureName="Backtesting" /> :
                             replayMode.active ? (
                                 <div className="flex-1 relative h-full">
                                     <ErrorBoundary>
@@ -1012,9 +1141,9 @@ const App: React.FC = () => {
                         ) : activeTab === 'ADMIN' ? (
                             (userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || userProfile?.role === 'ADMIN') ? <AdminPanel userProfile={userProfile} /> : <FeatureLocked featureName="Administration" />
                         ) : activeTab === 'BOTS' ? (
-                            (userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER' && userProfile?.features?.bots === false) ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel userProfile={userProfile} />
+                            !hasAccess('BOTS') ? <FeatureLocked featureName="Auto Bots" /> : <BotsPanel userProfile={userProfile} />
                         ) : activeTab === 'RISK' ? (
-                            <RiskPanel />
+                            !hasAccess('TRADING') ? <FeatureLocked featureName="Risk Management" /> : <RiskPanel />
                         ) : (
                             <>
                                 <div className="h-6 bg-[#0b0e11] border-b border-[#2a2e39] flex items-center overflow-hidden whitespace-nowrap px-2 z-10 shrink-0">

@@ -37,7 +37,12 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
     const filteredUsers = users.filter(u => 
         (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
         (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ).sort((a, b) => {
+        // Sort pending users to the top
+        if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+        if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
+        return 0;
+    });
 
     const toggleFeature = async (uid: string, feature: keyof UserFeatures) => {
         const userToUpdate = users.find(u => u.uid === uid);
@@ -95,6 +100,84 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
         }
     };
 
+    const changeTier = async (uid: string, newTier: UserProfile['tier']) => {
+        const userToUpdate = users.find(u => u.uid === uid);
+        if (!userToUpdate) return;
+
+        const oldTier = userToUpdate.tier;
+
+        setUsers(users.map(u => u.uid === uid ? { ...u, tier: newTier } : u));
+        if (selectedUser && selectedUser.uid === uid) {
+            setSelectedUser({ ...selectedUser, tier: newTier });
+        }
+
+        try {
+            const userRef = doc(db, `users/${uid}`);
+            await updateDoc(userRef, { tier: newTier });
+        } catch (error) {
+            setUsers(users.map(u => u.uid === uid ? { ...u, tier: oldTier } : u));
+            if (selectedUser && selectedUser.uid === uid) {
+                setSelectedUser({ ...selectedUser, tier: oldTier });
+            }
+            handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        }
+    };
+
+    const approveUser = async (uid: string) => {
+        const userToUpdate = users.find(u => u.uid === uid);
+        if (!userToUpdate) return;
+
+        const newTier = userToUpdate.requestedTier || 'NORMAL';
+        
+        setUsers(users.map(u => u.uid === uid ? { ...u, status: 'ACTIVE', tier: newTier } : u));
+        if (selectedUser && selectedUser.uid === uid) {
+            setSelectedUser({ ...selectedUser, status: 'ACTIVE', tier: newTier });
+        }
+
+        try {
+            const userRef = doc(db, `users/${uid}`);
+            await updateDoc(userRef, { 
+                status: 'ACTIVE', 
+                tier: newTier 
+            });
+        } catch (error) {
+            setUsers(users.map(u => u.uid === uid ? { ...u, status: userToUpdate.status, tier: userToUpdate.tier } : u));
+            handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        }
+    };
+
+    const suspendUser = async (uid: string) => {
+        const userToUpdate = users.find(u => u.uid === uid);
+        if (!userToUpdate) return;
+
+        const oldStatus = userToUpdate.status;
+        const newStatus = oldStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+
+        setUsers(users.map(u => u.uid === uid ? { ...u, status: newStatus } : u));
+        if (selectedUser && selectedUser.uid === uid) {
+            setSelectedUser({ ...selectedUser, status: newStatus });
+        }
+
+        try {
+            const userRef = doc(db, `users/${uid}`);
+            await updateDoc(userRef, { status: newStatus });
+        } catch (error) {
+            setUsers(users.map(u => u.uid === uid ? { ...u, status: oldStatus } : u));
+            handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        }
+    };
+
+    const isOnline = (lastActive?: number) => {
+        if (!lastActive) return false;
+        return (Date.now() - lastActive) < 180000; // 3 minutes
+    };
+
+    const isAway = (lastActive?: number) => {
+        if (!lastActive) return false;
+        const diff = Date.now() - lastActive;
+        return diff >= 180000 && diff < 900000; // 3-15 minutes
+    };
+
     if (isLoading) {
         return <div className="h-full bg-[#0b0e11] text-white p-6 flex items-center justify-center">Loading users...</div>;
     }
@@ -150,16 +233,16 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                         <div className="text-3xl font-bold text-white">{users.length}</div>
                     </div>
                     <div className="bg-[#151924] border border-[#2a2e39] rounded-xl p-6">
-                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Active (30d)</div>
-                        <div className="text-3xl font-bold text-green-400">2</div>
+                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Online Now</div>
+                        <div className="text-3xl font-bold text-green-400">{users.filter(u => isOnline(u.lastActive)).length}</div>
                     </div>
                     <div className="bg-[#151924] border border-[#2a2e39] rounded-xl p-6">
-                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Pro/Elite Plans</div>
-                        <div className="text-3xl font-bold text-blue-400">2</div>
+                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Pending Requests</div>
+                        <div className="text-3xl font-bold text-yellow-400">{users.filter(u => u.status === 'PENDING').length}</div>
                     </div>
                     <div className="bg-[#151924] border border-[#2a2e39] rounded-xl p-6">
-                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">MRR</div>
-                        <div className="text-3xl font-bold text-yellow-400">$149</div>
+                        <div className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">VIP/VVIP Tiers</div>
+                        <div className="text-3xl font-bold text-purple-400">{users.filter(u => u.tier === 'VIP' || u.tier === 'VVIP').length}</div>
                     </div>
                 </div>
 
@@ -174,10 +257,10 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                 <tr className="bg-[#0b0e11] text-gray-400 text-sm uppercase tracking-wider">
                                     <th className="p-4 font-medium">User</th>
                                     {showEmails && <th className="p-4 font-medium">Email</th>}
+                                    <th className="p-4 font-medium">Status</th>
+                                    <th className="p-4 font-medium">Tier</th>
                                     <th className="p-4 font-medium">Role</th>
-                                    <th className="p-4 font-medium">Plan</th>
-                                    <th className="p-4 font-medium">Joined</th>
-                                    <th className="p-4 font-medium">Last Login</th>
+                                    <th className="p-4 font-medium">Last Active</th>
                                     <th className="p-4 font-medium text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -186,8 +269,14 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                     <tr key={u.uid || Math.random().toString()} className="hover:bg-[#1a1f2e] transition-colors">
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-400 font-bold border border-blue-500/30">
-                                                    {(u.firstName || u.displayName || u.email || '?').charAt(0).toUpperCase()}
+                                                <div className="relative">
+                                                    <div className="w-10 h-10 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-400 font-bold border border-blue-500/30">
+                                                        {(u.firstName || u.displayName || u.email || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#151924] ${
+                                                        isOnline(u.lastActive) ? 'bg-green-500' : 
+                                                        isAway(u.lastActive) ? 'bg-yellow-500' : 'bg-gray-600'
+                                                    }`} />
                                                 </div>
                                                 <div>
                                                     <div className="font-bold text-white">
@@ -203,7 +292,31 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                             </td>
                                         )}
                                         <td className="p-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                u.status === 'ACTIVE' ? 'bg-green-900/30 text-green-400 border border-green-500/30' :
+                                                u.status === 'SUSPENDED' ? 'bg-red-900/30 text-red-400 border border-red-500/30' :
+                                                'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30 animate-pulse'
+                                            }`}>
+                                                {u.status || 'PENDING'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase w-fit ${
+                                                    u.tier === 'VVIP' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' :
+                                                    u.tier === 'VIP' ? 'bg-purple-900/30 text-purple-400 border border-purple-500/30' :
+                                                    u.tier === 'NORMAL' ? 'bg-blue-900/30 text-blue-400 border border-blue-500/30' :
+                                                    'bg-gray-800 text-gray-300 border border-gray-700'
+                                                }`}>
+                                                    {u.tier || 'FREE'}
+                                                </span>
+                                                {u.status === 'PENDING' && u.requestedTier && (
+                                                    <span className="text-[9px] text-gray-500 italic">Req: {u.requestedTier}</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                                                 u.role === 'SUPER_ADMIN' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' :
                                                 u.role === 'OWNER' ? 'bg-purple-900/30 text-purple-400 border border-purple-500/30' :
                                                 u.role === 'ADMIN' ? 'bg-red-900/30 text-red-400 border border-red-500/30' :
@@ -212,27 +325,23 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                                                 {u.role || 'MEMBER'}
                                             </span>
                                         </td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                u.plan === 'ELITE' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' :
-                                                u.plan === 'PRO' ? 'bg-blue-900/30 text-blue-400 border border-blue-500/30' :
-                                                'bg-gray-800 text-gray-300 border border-gray-700'
-                                            }`}>
-                                                {u.plan || 'FREE'}
-                                            </span>
-                                        </td>
                                         <td className="p-4 text-sm text-gray-400">
-                                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}
+                                            {u.lastActive ? new Date(u.lastActive).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Never'}
                                         </td>
-                                        <td className="p-4 text-sm text-gray-400">
-                                            {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : 'N/A'}
-                                        </td>
-                                        <td className="p-4 text-right">
+                                        <td className="p-4 text-right space-x-2">
+                                            {u.status === 'PENDING' && (
+                                                <button 
+                                                    onClick={() => approveUser(u.uid)}
+                                                    className="bg-green-600 hover:bg-green-500 text-white p-2 rounded-lg text-xs font-bold px-3 transition-colors"
+                                                >
+                                                    Approve
+                                                </button>
+                                            )}
                                             <button 
                                                 onClick={() => setSelectedUser(u)}
-                                                className="text-gray-400 hover:text-white p-2 transition-colors bg-[#2a2e39] rounded-lg text-sm font-bold px-4"
+                                                className="text-gray-400 hover:text-white p-2 transition-colors bg-[#2a2e39] rounded-lg text-xs font-bold px-3"
                                             >
-                                                Manage Access
+                                                Manage
                                             </button>
                                         </td>
                                     </tr>
@@ -271,26 +380,60 @@ export const AdminPanel: React.FC<{ userProfile: UserProfile | null }> = ({ user
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="mb-6">
-                                <div className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">User Role</div>
-                                <select 
-                                    value={selectedUser.role || 'MEMBER'}
-                                    onChange={(e) => changeRole(selectedUser.uid, e.target.value as UserProfile['role'])}
-                                    className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded-lg p-3 text-white outline-none focus:border-blue-500"
-                                    disabled={
-                                        (selectedUser.role === 'SUPER_ADMIN' && userProfile?.role !== 'SUPER_ADMIN') ||
-                                        (selectedUser.role === 'OWNER' && userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER')
-                                    }
-                                >
-                                    <option value="VIEWER">Viewer</option>
-                                    <option value="MEMBER">Member</option>
-                                    <option value="ADMIN">Admin</option>
-                                    {(userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || selectedUser.role === 'OWNER') && <option value="OWNER">Owner</option>}
-                                    {(userProfile?.role === 'SUPER_ADMIN' || selectedUser.role === 'SUPER_ADMIN') && <option value="SUPER_ADMIN">Super Admin</option>}
-                                </select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Tier</div>
+                                    <select 
+                                        value={selectedUser.tier || 'FREE'}
+                                        onChange={(e) => changeTier(selectedUser.uid, e.target.value as UserProfile['tier'])}
+                                        className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded-lg p-3 text-white outline-none focus:border-blue-500 text-sm"
+                                    >
+                                        <option value="FREE">Free</option>
+                                        <option value="NORMAL">Normal</option>
+                                        <option value="VIP">VIP</option>
+                                        <option value="VVIP">VVIP</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Role</div>
+                                    <select 
+                                        value={selectedUser.role || 'MEMBER'}
+                                        onChange={(e) => changeRole(selectedUser.uid, e.target.value as UserProfile['role'])}
+                                        className="w-full bg-[#0b0e11] border border-[#2a2e39] rounded-lg p-3 text-white outline-none focus:border-blue-500 text-sm"
+                                        disabled={
+                                            (selectedUser.role === 'SUPER_ADMIN' && userProfile?.role !== 'SUPER_ADMIN') ||
+                                            (selectedUser.role === 'OWNER' && userProfile?.role !== 'SUPER_ADMIN' && userProfile?.role !== 'OWNER')
+                                        }
+                                    >
+                                        <option value="VIEWER">Viewer</option>
+                                        <option value="MEMBER">Member</option>
+                                        <option value="ADMIN">Admin</option>
+                                        {(userProfile?.role === 'SUPER_ADMIN' || userProfile?.role === 'OWNER' || selectedUser.role === 'OWNER') && <option value="OWNER">Owner</option>}
+                                        {(userProfile?.role === 'SUPER_ADMIN' || selectedUser.role === 'SUPER_ADMIN') && <option value="SUPER_ADMIN">Super Admin</option>}
+                                    </select>
+                                </div>
                             </div>
 
-                            <div className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Feature Toggles</div>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => suspendUser(selectedUser.uid)}
+                                    className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
+                                        selectedUser.status === 'SUSPENDED' ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-red-600/20 text-red-400 border border-red-500/50'
+                                    }`}
+                                >
+                                    {selectedUser.status === 'SUSPENDED' ? 'Unsuspend User' : 'Suspend User'}
+                                </button>
+                                {selectedUser.status === 'PENDING' && (
+                                    <button 
+                                        onClick={() => approveUser(selectedUser.uid)}
+                                        className="flex-1 py-2 rounded-lg font-bold text-xs bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                                    >
+                                        Approve Request
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="text-sm font-bold text-gray-500 uppercase tracking-wider mt-6 mb-4">Feature Overrides</div>
                             
                             {[
                                 { key: 'bots', label: 'Algorithmic Trading (Bots)', desc: 'Allow user to create and run trading bots.' },
